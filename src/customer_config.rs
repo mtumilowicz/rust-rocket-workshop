@@ -17,7 +17,7 @@ impl CustomerInMemoryRepository {
 impl CustomerRepository for CustomerInMemoryRepository {
 
     fn create(&self, customer: Customer) -> Result<Customer, CustomerError> {
-        match self.get_by_id(customer.id().clone()) {
+        match self.get_by_id(customer.id()) {
             None => {
                 self.requests.write().unwrap().insert(customer.id().clone(), customer.clone());
                 Ok(customer.clone())
@@ -29,7 +29,7 @@ impl CustomerRepository for CustomerInMemoryRepository {
 
     }
 
-    fn get_by_id(&self, customer_id: CustomerId) -> Option<Customer> {
-        self.requests.read().unwrap().get(&customer_id).cloned()
+    fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer> {
+        self.requests.read().unwrap().get(customer_id).cloned()
     }
 }

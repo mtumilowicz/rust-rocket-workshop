@@ -1,5 +1,3 @@
-use std::sync::Mutex;
-use crate::customer_config::CustomerInMemoryRepository;
 use crate::id::IdService;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
@@ -64,7 +62,7 @@ impl CustomerService {
         self.repository.create(customer)
     }
 
-    pub async fn get_by_id(&self, id: CustomerId) -> Option<Customer> {
+    pub async fn get_by_id(&self, id: &CustomerId) -> Option<Customer> {
         self.repository.get_by_id(id)
     }
 }
@@ -76,6 +74,6 @@ pub(crate) enum CustomerError {
 
 pub trait CustomerRepository {
     fn create(&self, customer: Customer) -> Result<Customer, CustomerError>;
-    fn get_by_id(&self, customer_id: CustomerId) -> Option<Customer>;
+    fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer>;
 
 }
