@@ -20,7 +20,7 @@ impl CustomerRepository for CustomerInMemoryRepository {
         match self.get_by_id(customer.id()) {
             None => {
                 self.customers.insert(customer.id().clone(), customer.clone());
-                Ok(customer.clone())
+                Ok(customer)
             }
             Some(_) =>
                 Err(CustomerError::CustomerAlreadyExist)
