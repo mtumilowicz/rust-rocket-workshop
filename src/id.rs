@@ -11,7 +11,7 @@ impl IdService {
         IdService { repository: Box::new(repository) }
     }
 
-    pub fn generate(&self) -> String {
+    pub async fn generate(&self) -> String {
         self.repository.get()
     }
 }
