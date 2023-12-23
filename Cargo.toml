@@ -7,4 +7,11 @@ edition = "2021"
 
 [dependencies]
 uuid = { version = "1.6.1", features = ["v4"] }
-tokio = { version = "1.35.1", features = ["full"] }
+config = "0.13.4"
+serde = { version = "1.0.193", features = ["derive"] }
+serde_derive = "1.0.193"
+tokio-stream = "0.1.14"
+
+[dependencies.rocket]
+version = "0.5.0"
+features = ["json"]

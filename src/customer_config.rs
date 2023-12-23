@@ -3,23 +3,23 @@ use std::sync::RwLock;
 use crate::customer::{Customer, CustomerId, CustomerRepository, CustomerError};
 
 pub struct CustomerInMemoryRepository {
-    customers: RwLock<HashMap<CustomerId, Customer>>,
+    customers: HashMap<CustomerId, Customer>,
 }
 
 impl CustomerInMemoryRepository {
     pub fn new() -> Self {
         CustomerInMemoryRepository {
-            customers: RwLock::new(HashMap::new()),
+            customers: HashMap::new(),
         }
     }
 }
 
 impl CustomerRepository for CustomerInMemoryRepository {
 
-    fn create(&self, customer: Customer) -> Result<Customer, CustomerError> {
+    fn create(&mut self, customer: Customer) -> Result<Customer, CustomerError> {
         match self.get_by_id(customer.id()) {
             None => {
-                self.customers.write().unwrap().insert(customer.id().clone(), customer.clone());
+                self.customers.insert(customer.id().clone(), customer.clone());
                 Ok(customer.clone())
             }
             Some(_) =>
@@ -29,7 +29,7 @@ impl CustomerRepository for CustomerInMemoryRepository {
 
     }
 
-    fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer> {
-        self.customers.read().unwrap().get(customer_id).cloned()
+    fn get_by_id(&self, customer_id: &CustomerId) -> Option<&Customer> {
+        self.customers.get(customer_id)
     }
 }

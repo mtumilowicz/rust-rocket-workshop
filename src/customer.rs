@@ -1,7 +1,14 @@
 use crate::id::IdService;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
-pub struct CustomerId(String);
+pub struct CustomerId(pub String);
+
+impl CustomerId {
+    pub fn new(value: &str) -> Self {
+        CustomerId(value.to_string())
+    }
+}
+
 
 #[derive(Clone, Debug)]
 pub struct Customer {
@@ -56,13 +63,13 @@ impl CustomerService {
             repository: Box::new(repository)
         }
     }
-    pub async fn create(&self, command: NewCustomerCommand) -> Result<Customer, CustomerError> {
+    pub async fn create(&mut self, command: NewCustomerCommand) -> Result<Customer, CustomerError> {
         let id = self.id_service.generate().await;
         let customer = command.to_customer(CustomerId(id));
         self.repository.create(customer)
     }
 
-    pub async fn get_by_id(&self, id: &CustomerId) -> Option<Customer> {
+    pub async fn get_by_id(&self, id: &CustomerId) -> Option<&Customer> {
         self.repository.get_by_id(id)
     }
 }
@@ -73,7 +80,7 @@ pub(crate) enum CustomerError {
 }
 
 pub trait CustomerRepository {
-    fn create(&self, customer: Customer) -> Result<Customer, CustomerError>;
-    fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer>;
+    fn create(&mut self, customer: Customer) -> Result<Customer, CustomerError>;
+    fn get_by_id(&self, customer_id: &CustomerId) -> Option<&Customer>;
 
 }
