@@ -11,6 +11,7 @@ mod id;
 mod customer;
 mod customer_config;
 mod b;
+mod gateway;
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(crate = "rocket::serde")]
