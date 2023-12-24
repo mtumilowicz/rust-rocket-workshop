@@ -1,6 +1,6 @@
 use rocket::http::Status;
 use rocket::{get, post};
-use rocket::response::status::{Created, BadRequest};
+use rocket::response::status::{Created, BadRequest, Unauthorized, Custom};
 use rocket::serde::json::Json;
 use serde_derive::{Deserialize, Serialize};
 use uuid::Error;
@@ -40,7 +40,7 @@ impl From<Customer> for CustomerApiOutput {
 pub async fn create_customer(
     request: Json<NewCustomerApiInput>,
     customer_service: &rocket::State<CustomerService>,
-) -> Result<Created<Json<CustomerApiOutput>>, BadRequest<String>> {
+) -> Result<Created<Json<CustomerApiOutput>>, Custom<&'static str>> {
     let new_customer: NewCustomerCommand = request.into_inner().into();
     match customer_service.create(new_customer).await {
         Ok(customer) =>  {
@@ -61,10 +61,9 @@ pub async fn get_customer(
         .map(|r| Json(r.into()))
 }
 
-fn map_customer_error(error: CustomerError) -> BadRequest<String> {
+fn map_customer_error(error: CustomerError) -> Custom<&'static str> {
     match error {
-        CustomerError::CustomerAlreadyExist => {
-            BadRequest("Bad request: Customer already exists".to_string())
-        }
+        CustomerError::CustomerAlreadyExist =>
+            Custom(Status::BadRequest, "customer already exists"),
     }
 }
