@@ -41,7 +41,7 @@ impl NewCustomerCommand {
     pub fn new(name: String, locked: bool) -> Self {
         NewCustomerCommand { name, locked }
     }
-    fn to_customer(self, id: CustomerId) -> Customer {
+    pub fn to_customer(self, id: CustomerId) -> Customer {
         Customer {
             id,
             name: self.name,

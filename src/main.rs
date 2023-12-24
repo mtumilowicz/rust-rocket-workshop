@@ -10,6 +10,7 @@ mod id_config;
 mod id;
 mod customer;
 mod customer_config;
+mod b;
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(crate = "rocket::serde")]
