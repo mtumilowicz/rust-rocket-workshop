@@ -1,6 +1,5 @@
-use std::collections::HashMap;
 use std::thread;
-use crate::customer::{Customer, CustomerId, CustomerRepository, NewCustomerCommand};
+use crate::customer::{CustomerId, CustomerRepository, NewCustomerCommand};
 use crate::customer_config::CustomerInMemoryRepository;
 
 fn main() {
@@ -13,7 +12,7 @@ fn main() {
             String::from("John Doe3"),
             false,
         );
-        let result = repository.create(customer1.to_customer(CustomerId::new("a")));
+        let result = repository.create(customer1.to_customer(CustomerId::new(String::from("a"))));
         println!("{:?}", result);
     });
 

@@ -1,10 +1,9 @@
 use rocket::http::Status;
 use rocket::{get, post};
-use rocket::response::status::{Created, BadRequest, Unauthorized, Custom};
+use rocket::response::status::{Created, Custom};
 use rocket::serde::json::Json;
 use serde_derive::{Deserialize, Serialize};
-use uuid::Error;
-use crate::customer::{Customer, CustomerError, CustomerId, CustomerService, NewCustomerCommand};
+use crate::customer::{Customer, CustomerError, CustomerService, NewCustomerCommand};
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
@@ -53,7 +52,7 @@ pub async fn create_customer(
 
 #[get("/customers/<customer_id>")]
 pub async fn get_customer(
-    customer_id: &str,
+    customer_id: String,
     service: &rocket::State<CustomerService>,
 ) -> Option<Json<CustomerApiOutput>> {
     let customer_id = &customer_id.into();

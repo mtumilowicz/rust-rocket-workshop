@@ -4,8 +4,8 @@ use crate::id::IdService;
 pub struct CustomerId(String);
 
 impl CustomerId {
-    pub fn new(value: &str) -> Self {
-        CustomerId(value.to_string())
+    pub fn new(value: String) -> Self {
+        CustomerId(value)
     }
 
     pub fn raw(&self) -> String {
@@ -13,8 +13,8 @@ impl CustomerId {
     }
 }
 
-impl From<&str> for CustomerId {
-    fn from(value: &str) -> Self {
+impl From<String> for CustomerId {
+    fn from(value: String) -> Self {
         CustomerId::new(value)
     }
 }
