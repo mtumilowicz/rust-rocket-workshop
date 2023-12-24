@@ -5,6 +5,7 @@ use crate::customer::{Customer, CustomerId, CustomerService, NewCustomerCommand}
 use crate::customer_config::CustomerInMemoryRepository;
 use crate::id::{IdRepository, IdService};
 use crate::id_config::{DeterministicRepository, UuidRepository};
+use crate::gateway::{create_customer, get_customer};
 
 mod id_config;
 mod id;
@@ -21,25 +22,14 @@ struct CustomerApiOutput {
     lock: bool
 }
 
-impl From<&Customer> for CustomerApiOutput {
-    fn from(value: &Customer) -> Self {
+impl From<Customer> for CustomerApiOutput {
+    fn from(value: Customer) -> Self {
         CustomerApiOutput {
             id: value.id().clone().0,
             name: value.name().to_string(),
             lock: value.locked()
         }
     }
-}
-
-#[get("/get_request/<name>")]
-pub async fn get_request_handler(
-    name: &str,
-    service: &rocket::State<CustomerService>,
-) -> Option<Json<CustomerApiOutput>> {
-    // Retrieve the HelloRequest from the service by name
-    let request = service.get_by_id(&CustomerId::new(name)).await;
-
-    request.map(|r| r.into()).map(Json)
 }
 
 #[launch]
@@ -78,6 +68,6 @@ async fn rocket() -> _ {
 
     rocket::build()
         .manage(ggg)
-        .mount("/api", routes![get_request_handler])
+        .mount("/api", routes![create_customer, get_customer])
 
 }

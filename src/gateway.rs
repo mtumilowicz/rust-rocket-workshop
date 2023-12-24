@@ -1,20 +1,14 @@
 use rocket::http::Status;
-use rocket::post;
+use rocket::{get, post};
 use rocket::response::status::{Created, BadRequest};
 use rocket::serde::json::Json;
 use serde_derive::{Deserialize, Serialize};
-use crate::customer::{Customer, CustomerError, CustomerService, NewCustomerCommand};
+use crate::customer::{Customer, CustomerError, CustomerId, CustomerService, NewCustomerCommand};
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct NewCustomerApiInput {
     name: String,
-}
-
-impl From<NewCustomerApiInput> for NewCustomerCommand {
-    fn from(api_input: NewCustomerApiInput) -> Self {
-        NewCustomerCommand::new(api_input.name, false)
-    }
 }
 
 #[derive(Serialize)]
@@ -27,7 +21,11 @@ pub struct CustomerApiOutput {
 
 impl From<Customer> for CustomerApiOutput {
     fn from(customer: Customer) -> Self {
-        customer.into()
+        CustomerApiOutput {
+            id: customer.id().0.to_string(),
+            name: customer.name().to_string(),
+            locked: customer.locked(),
+        }
     }
 }
 
@@ -36,8 +34,13 @@ pub async fn create_customer(
     request: Json<NewCustomerApiInput>,
     customer_service: &rocket::State<CustomerService>,
 ) -> Result<Created<Json<CustomerApiOutput>>, BadRequest<String>> {
-    match customer_service.create(request.into_inner().into()).await {
-        Ok(output) => Ok(Created::new("/resource.json").body(Json(output.into()))),
+    let input = request.into_inner();
+    let new_customer = NewCustomerCommand::new(input.name, false);
+    match customer_service.create(new_customer).await {
+        Ok(customer) =>  {
+            let output = CustomerApiOutput::from(customer);
+            Ok(Created::new(output.id.to_string()).body(Json(output)))
+        },
         Err(customer_error) => {
             match customer_error {
                 CustomerError::CustomerAlreadyExist => {
@@ -46,4 +49,13 @@ pub async fn create_customer(
             }
         },
     }
+}
+
+#[get("/customers/<customer_id>")]
+pub async fn get_customer(
+    customer_id: &str,
+    service: &rocket::State<CustomerService>,
+) -> Option<Json<CustomerApiOutput>> {
+    service.get_by_id(&CustomerId::new(customer_id)).await
+        .map(|r| Json(r.into()))
 }

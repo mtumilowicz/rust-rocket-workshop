@@ -63,13 +63,13 @@ impl CustomerService {
             repository: Box::new(repository)
         }
     }
-    pub async fn create(&mut self, command: NewCustomerCommand) -> Result<Customer, CustomerError> {
+    pub async fn create(&self, command: NewCustomerCommand) -> Result<Customer, CustomerError> {
         let id = self.id_service.generate().await;
         let customer = command.to_customer(CustomerId(id));
         self.repository.create(customer)
     }
 
-    pub async fn get_by_id(&self, id: &CustomerId) -> Option<&Customer> {
+    pub async fn get_by_id(&self, id: &CustomerId) -> Option<Customer> {
         self.repository.get_by_id(id)
     }
 }
@@ -80,7 +80,7 @@ pub(crate) enum CustomerError {
 }
 
 pub trait CustomerRepository {
-    fn create(&mut self, customer: Customer) -> Result<Customer, CustomerError>;
-    fn get_by_id(&self, customer_id: &CustomerId) -> Option<&Customer>;
+    fn create(&self, customer: Customer) -> Result<Customer, CustomerError>;
+    fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer>;
 
 }
