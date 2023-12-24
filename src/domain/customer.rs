@@ -1,4 +1,4 @@
-use crate::id::IdService;
+use crate::domain::id::IdService;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
 pub struct CustomerId(String);

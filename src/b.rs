@@ -1,6 +1,6 @@
 use std::thread;
 use crate::domain::customer::{CustomerId, CustomerRepository, NewCustomerCommand};
-use crate::customer_config::CustomerInMemoryRepository;
+use crate::infrastructure::customer_config::CustomerInMemoryRepository;
 
 fn main() {
     // Create a repository
