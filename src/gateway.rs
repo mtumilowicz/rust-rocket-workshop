@@ -3,12 +3,19 @@ use rocket::{get, post};
 use rocket::response::status::{Created, BadRequest};
 use rocket::serde::json::Json;
 use serde_derive::{Deserialize, Serialize};
+use uuid::Error;
 use crate::customer::{Customer, CustomerError, CustomerId, CustomerService, NewCustomerCommand};
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct NewCustomerApiInput {
     name: String,
+}
+
+impl Into<NewCustomerCommand> for NewCustomerApiInput {
+    fn into(self) -> NewCustomerCommand {
+        NewCustomerCommand::new(self.name, false)
+    }
 }
 
 #[derive(Serialize)]
@@ -34,20 +41,13 @@ pub async fn create_customer(
     request: Json<NewCustomerApiInput>,
     customer_service: &rocket::State<CustomerService>,
 ) -> Result<Created<Json<CustomerApiOutput>>, BadRequest<String>> {
-    let input = request.into_inner();
-    let new_customer = NewCustomerCommand::new(input.name, false);
+    let new_customer: NewCustomerCommand = request.into_inner().into();
     match customer_service.create(new_customer).await {
         Ok(customer) =>  {
-            let output = CustomerApiOutput::from(customer);
+            let output: CustomerApiOutput = customer.into();
             Ok(Created::new(output.id.to_string()).body(Json(output)))
         },
-        Err(customer_error) => {
-            match customer_error {
-                CustomerError::CustomerAlreadyExist => {
-                    Err(BadRequest("Bad request: Customer already exists".to_string()))
-                }
-            }
-        },
+        Err(customer_error) => Err(map_customer_error(customer_error)),
     }
 }
 
@@ -56,6 +56,15 @@ pub async fn get_customer(
     customer_id: &str,
     service: &rocket::State<CustomerService>,
 ) -> Option<Json<CustomerApiOutput>> {
-    service.get_by_id(&CustomerId::new(customer_id)).await
+    let customer_id = &customer_id.into();
+    service.get_by_id(customer_id).await
         .map(|r| Json(r.into()))
+}
+
+fn map_customer_error(error: CustomerError) -> BadRequest<String> {
+    match error {
+        CustomerError::CustomerAlreadyExist => {
+            BadRequest("Bad request: Customer already exists".to_string())
+        }
+    }
 }

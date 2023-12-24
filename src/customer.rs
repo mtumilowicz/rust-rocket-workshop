@@ -7,6 +7,16 @@ impl CustomerId {
     pub fn new(value: &str) -> Self {
         CustomerId(value.to_string())
     }
+
+    pub fn raw(&self) -> String {
+        self.0.to_string()
+    }
+}
+
+impl From<&str> for CustomerId {
+    fn from(value: &str) -> Self {
+        CustomerId::new(value)
+    }
 }
 
 
