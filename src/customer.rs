@@ -1,7 +1,7 @@
 use crate::id::IdService;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
-pub struct CustomerId(pub String);
+pub struct CustomerId(String);
 
 impl CustomerId {
     pub fn new(value: &str) -> Self {

@@ -25,7 +25,7 @@ struct CustomerApiOutput {
 impl From<Customer> for CustomerApiOutput {
     fn from(value: Customer) -> Self {
         CustomerApiOutput {
-            id: value.id().clone().0,
+            id: value.id().raw(),
             name: value.name().to_string(),
             lock: value.locked()
         }

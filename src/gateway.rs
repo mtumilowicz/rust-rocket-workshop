@@ -29,7 +29,7 @@ pub struct CustomerApiOutput {
 impl From<Customer> for CustomerApiOutput {
     fn from(customer: Customer) -> Self {
         CustomerApiOutput {
-            id: customer.id().0.to_string(),
+            id: customer.id().raw(),
             name: customer.name().to_string(),
             locked: customer.locked(),
         }
