@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use crate::customer::{Customer, CustomerId, CustomerRepository, CustomerError};
+use crate::domain::customer::{Customer, CustomerId, CustomerRepository, CustomerError};
 
 pub struct CustomerInMemoryRepository {
     customers: RwLock<HashMap<CustomerId, Customer>>,

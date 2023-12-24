@@ -1,5 +1,5 @@
 use std::thread;
-use crate::customer::{CustomerId, CustomerRepository, NewCustomerCommand};
+use crate::domain::customer::{CustomerId, CustomerRepository, NewCustomerCommand};
 use crate::customer_config::CustomerInMemoryRepository;
 
 fn main() {

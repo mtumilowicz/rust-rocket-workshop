@@ -3,7 +3,7 @@ use rocket::{get, post};
 use rocket::response::status::{Created, Custom};
 use rocket::serde::json::Json;
 use serde_derive::{Deserialize, Serialize};
-use crate::customer::{Customer, CustomerError, CustomerService, NewCustomerCommand};
+use crate::domain::customer::{Customer, CustomerError, CustomerService, NewCustomerCommand};
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]

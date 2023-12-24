@@ -1,7 +1,7 @@
 use rocket::{get, launch, routes};
 use rocket::serde::json::Json;
 use serde_derive::Serialize;
-use crate::customer::{Customer, CustomerId, CustomerService, NewCustomerCommand};
+use crate::domain::customer::{Customer, CustomerId, CustomerService, NewCustomerCommand};
 use crate::customer_config::CustomerInMemoryRepository;
 use crate::id::{IdRepository, IdService};
 use crate::id_config::{DeterministicRepository, UuidRepository};
@@ -9,10 +9,10 @@ use crate::gateway::{create_customer, get_customer};
 
 mod id_config;
 mod id;
-mod customer;
 mod customer_config;
 mod b;
 mod gateway;
+mod domain;
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(crate = "rocket::serde")]
