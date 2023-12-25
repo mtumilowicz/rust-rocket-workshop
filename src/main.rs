@@ -46,7 +46,7 @@ async fn rocket() -> _ {
     let dddd = ccc.generate().await;
     println!("{} {} {}", dd, ddd, dddd);
 
-    let gg = CustomerInMemoryRepository::new();
+    let gg = Box::new(CustomerInMemoryRepository::new());
     let mut ggg = CustomerService::new(cc, gg);
     let hh = ggg.create(NewCustomerCommand::new(
         String::from("John Doe"),

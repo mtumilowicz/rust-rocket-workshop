@@ -67,10 +67,10 @@ pub struct CustomerService {
 
 impl CustomerService {
 
-    pub(crate) fn new(id_service: IdService, repository: impl CustomerRepository + Send + Sync + 'static) -> CustomerService {
+    pub(crate) fn new<T: CustomerRepository + Send + Sync + 'static>(id_service: IdService, repository: Box<T>) -> CustomerService {
         CustomerService {
             id_service: id_service,
-            repository: Box::new(repository)
+            repository: repository
         }
     }
     pub async fn create(&self, command: NewCustomerCommand) -> Result<Customer, CustomerError> {
