@@ -1,8 +1,34 @@
+use std::fmt::Debug;
+use std::sync::{Arc, RwLock};
 use std::thread;
 use crate::domain::customer::{CustomerId, CustomerRepository, NewCustomerCommand};
 use crate::infrastructure::customer_config::CustomerInMemoryRepository;
 
+fn test<T>(data: Arc<RwLock<T>>)
+    where
+        T: 'static + Send + Sync + Debug,
+{
+    // Spawn a worker thread
+    let handle = thread::spawn(move || {
+        // Access the data inside the RwLock
+        let read_guard = data.read().unwrap();
+        println!("Worker Thread: Value inside RwLock: {:?}", *read_guard);
+    });
+
+    // Wait for the worker thread to finish
+    handle.join().unwrap();
+}
+
+
 fn main() {
+
+    // {
+    //     let t = 3;
+    //     let r = &t;
+    //     let a = Arc::new(RwLock::new(r));
+    //     test(a);
+    // }
+
     // Create a repository
     let mut repository = CustomerInMemoryRepository::new();
 
