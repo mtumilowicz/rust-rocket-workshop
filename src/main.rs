@@ -5,6 +5,7 @@ use infrastructure::customer_config::CustomerInMemoryRepository;
 use domain::id::{IdRepository, IdService};
 use crate::infrastructure::id_config::{DeterministicRepository, UuidRepository};
 use crate::gateway::customer::{create_customer, get_customer};
+use crate::infrastructure::app_config::AppConfig;
 
 mod b;
 mod domain;
@@ -62,6 +63,11 @@ async fn rocket() -> _ {
     )).await;
     println!("{:?} {:?} {:?}", hh, hhh, hhhh);
     println!("Hello, world!");
+
+    // env var ROCKET_PROFILE=development
+    let config2 = rocket::Config::figment().extract::<AppConfig>();
+    // Print out our settings
+    println!("c------------------------{:?}", config2);
 
     rocket::build()
         .manage(ggg)
