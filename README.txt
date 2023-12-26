@@ -12,19 +12,89 @@
     * https://play.rust-lang.org/?version=stable&mode=debug&edition=2021&gist=ef5675b5d78490c1fb440c229cc5d129
     * https://stackoverflow.com/questions/31949579/understanding-and-relationship-between-box-ref-and
     * https://users.rust-lang.org/t/box-with-a-trait-object-requires-static-lifetime/35261
+    * https://stackoverflow.com/questions/24158114/what-are-the-differences-between-rusts-string-and-str
+    * https://chrismorgan.info/blog/rust-fizzbuzz/
+    * https://stackoverflow.com/questions/31012923/what-is-the-difference-between-copy-and-clone
+    * https://stackoverflow.com/questions/65434252/how-to-return-a-reference-to-a-value-from-hashmap-wrappered-in-arc-and-mutex-in
+    * https://www.reddit.com/r/rust/comments/17luh6c/how_can_i_avoid_cloning_everywhere/
+    * https://www.reddit.com/r/rust/comments/vy9zvw/the_docs_say_hashmap_is_send_sync_how_can_that_be/
 
 1. general
     * allocates on stack by default
+    * to test online: https://play.rust-lang.org/
 1. ownership and borrowing
-2. packages crates modules
+    borrow
+    ```
+    let numbers = vec![10, 20, 30, 40, 50];
+    let mut d = numbers[0];
+
+    for m in &numbers[1..] { // borrow
+        d = gcd(d, *m); // borrow
+    }
+    ```
+    vs (move)
+    ```
+    for m in numbers[1..] { // drains numbers
+        d = gcd(d, m); // takes ownership
+    }
+    ```
+1. packages crates modules
 1. structs
+    * copy vs clone
+        * Clone is designed for arbitrary duplications: a Clone implementation for a type T can do arbitrarily complicated operations required to create a new T. It is a normal trait (other than being in the prelude), and so requires being used like a normal trait, with method calls, etc.
+
+          The Copy trait represents values that can be safely duplicated via memcpy: things like reassignments and passing an argument by-value to a function are always memcpys, and so for Copy types, the compiler understands that it doesn't need to consider those a move.
+        * Copy is implicit, inexpensive, and cannot be re-implemented (memcpy).
+          Clone is explicit, may be expensive, and may be re-implement arbitrarily.
+        * moves vs automatic copies
+            ```
+            #[derive(Debug, Clone, Copy)]
+            pub struct PointCloneAndCopy {
+                pub x: f64,
+            }
+
+            #[derive(Debug, Clone)]
+            pub struct PointCloneOnly {
+                pub x: f64,
+            }
+
+            fn test_copy_and_clone() {
+                let p1 = PointCloneAndCopy { x: 0. };
+                let p2 = p1; // because type has `Copy`, it gets copied automatically.
+                println!("{:?} {:?}", p1, p2);
+            }
+
+            fn test_clone_only() {
+                let p1 = PointCloneOnly { x: 0. };
+                let p2 = p1; // because type has no `Copy`, this is a move instead; to avoid the implicit move, we could explicitly call let p2 = p1.clone();
+                println!("{:?} {:?}", p1, p2); //
+            }
+            ```
+        * The Copy trait in rust defines the ability to implicitly copy an object. The behavior Copy is not overloadable. It is always a simple bitwise copy.
     * what to use inside struct: rule of thumb
     * As a rule of thumb, you should never put the &str type in a struct. Lifetimes on structs should only be used when the struct is a "view" or "cursor" that looks inside some other struct, which is not what is happening here.
     * You need to ask yourself "Does the struct own this data?". If so, you go with 'static (unborrowed) fields and if not, you go with references. If ownership is shared, you go with Rc/Weak/Arc depending on the kind of ownership. And if it's possibly shared, you go with Cow.
     * I'd just default to String for struct fields (unless it's a constant string literal so that you can use &'static str. &str is easy for read-only function parameters, but it's a pain for structs, so I generally only use it if I really need it.
-3. error: unrecoverable: panic, recoverable: result
-4. traits, lifetimes
+1. error: unrecoverable: panic, recoverable: result
+1. traits, lifetimes
+    * lifetime elision
     * utility traits
+        * Any type that implements the
+            FromStr trait has a from_str method that tries to parse a value of that type from a
+            string
+        * Send, Sync
+            * Send type can be moved to different thread, Sync type's reference can be moved to different thread.
+            * A type being Send means it can be moved across thread boundaries. This means there is always exactly one owner even as the thread changes.
+            * A type being Sync means it can be shared between threads. This means a value can be borrowed from multiple threads.
+            * Note that those are exclusive: in Rust, a value cannot be moved while borrowed, and you cannot borrow a value you no longer have.
+            * The docs say HashMap is Send + Sync-- how can that be?
+                * It is Send because it can be sent between threads safely.
+
+                  It is Sync because a &HashMap can be sent between threads safely.
+            * Personally, I find it easiest to understand these traits by thinking about types that don't implement them.
+                * For example, Rc is not Send, because it uses non-atomic operations to manage its reference count, which would lead to a data race if an Rc were moved to another thread.
+                * Similarly, RefCell is not Sync, because it allows unsynchronized mutation of its state.
+            * You can read the hashmap, string and pretty much any other ‘simple’ structure concurrently from as many threads as you’d like. At the same time, if you have an exclusive reference, you can modify such structures from whatever thread because there’s only one thread accessing it.
     * macros (derev)
     * static dispatch
         * Static dispatch is not something Go or Java have.
@@ -148,9 +218,50 @@
           The Arc is passed to the test function, which spawns a worker thread. The worker thread may outlive the current block and attempt to access the shared reference r after it has gone out of scope.
           Undefined Behavior:
           When the worker thread accesses the shared reference after the original block has ended, it leads to undefined behavior. The reference r is no longer valid, as it points to memory that has been deallocated.
-5. closures
-6. cargo
-7. smart pointers: box
+1. closures
+    || {body} when no param
+    |a| {body} with param
+1. cargo
+1. references, smart pointers: box
+    * all you need to know is that &x borrows a reference to x, and
+      that *r is the value that the reference r refers to.
+    * What if Command / Query separation is the answer? When you run a command to change data, move the memory around (no reference &); when you run a query to read data, use references.
+        * When you create / insert into a data structure, you move the data in.
+        * Reading is referencing, removing is moving data out, updating is a mem::replace or swap; iteration is usually done with references.
+    * I pretty much never call clone() except on Rcs and Arcs
+    * returns a value referencing data owned by the current function
+        * How to return a reference to a value from Hashmap wrappered in Arc and Mutex in Rust?
+        ```
+        use std::sync::{Arc,Mutex};
+        use std::collections::HashMap;
+
+        struct Hey{
+            a:Arc<Mutex<HashMap<String, String>>>
+        }
+
+
+        impl Hey {
+            fn get(&self,key:&String)->&String{
+                self.a.lock().unwrap().get(key).unwrap() // compilation error: returns a value referencing data owned by the current function
+            }
+        }
+        ```
+        * If that return type were allowed to point inside the Mutex's data, there would be nothing stopping other code from locking the mutex and deleting the entry, meaning that the returned reference would point at something that was deallocated
+        * If it's allowed, the map might change due to the operation from another thread, and it's UB
+    * Cannot return reference to temporary value
+        ```
+        struct MyStruct {
+            data: String,
+        }
+
+        fn create_struct() -> &'static MyStruct {
+            let my_struct = MyStruct {
+                data: String::from("Hello, Rust!"),
+            };
+
+            &my_struct // Error: Cannot return reference to temporary value
+        }
+        ```
     * Box, ref, & and *
     * Box is a library-defined smart pointer type; ref is a syntax for pattern matching; & is a reference operator, doubling as a sigil in reference types; * is a dereference operator, doubling as a sigil in raw pointer types
     * references and raw pointers:
@@ -181,6 +292,41 @@
 
 8. pattern matching
 1. String vs str
+    * So what is a String? That's three words; two are the same as for &str but it adds a third word which is the capacity of the str buffer on the heap, always on the heap (a str is not necessarily on the heap) it manages before it's filled and has to re-allocate. the String basically owns a str as they say; it controls it and can resize it and reallocate it when it sees fit. So a String is as said closer to a &str than to a str.
+    * Another thing is a Box<str>; this also owns a str and its runtime representation is the same as a &str but it also owns the str unlike the &str but it cannot resize it because it does not know its capacity so basically a Box<str> can be seen as a fixed-length String that cannot be resized (you can always convert it into a String if you want to resize it).
+    * &str is super useful to be able to to have multiple different substrings of a String without having to copy; as said a String owns the str on the heap it manages and if you could only create a substring of a String with a new String it would have to be copied because everything in Rust can only have one single owner to deal with memory safety. So for instance you can slice a string:
+        * let string: String   = "a string".to_string();
+        * let substring1: &str = &string[1..3];
+        * let substring2: &str = &string[2..4];
+    * String:
+
+      Rust's owned String type, the string itself lives on the heap and therefore is mutable and can alter its size and contents.
+      Because String is owned when the variables which owns the string goes out of scope the memory on the heap will be freed.
+      Variables of type String are fat pointers (pointer + associated metadata)
+      The fat pointer is 3 * 8 bytes (wordsize) long and consists of the following 3 elements:
+      Pointer to actual data on the heap, it points to the first character
+      Length of the string (# of characters)
+      Capacity of the string on the heap
+    * &str:
+
+      Rust's non-owned String type, it's immutable by default. The string itself lives somewhere else in memory usually on the heap or in 'static memory.
+      Because String is non-owned when &str variables go out of scope the memory of the string will not be freed.
+      Variables of type &str are fat pointers (pointer + associated metadata)
+      The fat pointer is 2 * 8 bytes (wordsize) long and consists of the following 2 elements:
+      Pointer to actual data on the heap, it points to the first character
+      Length of the string (# of characters)
+    * String is an Object.
+
+      &str is a pointer at a part of object.
+    * For C# and Java people:
+
+      Rust' String === StringBuilder
+      Rust's &str === (immutable) string
+    * String is the dynamic heap string type, like Vec: use it when you need to own or modify your string data.
+    * str is an immutable1 sequence of UTF-8 bytes of dynamic length somewhere in memory.
+    * In summary, use String if you need owned string data (like passing strings to other threads, or building them at runtime), and use &str if you only need a view of a string.
+    * similar to the relationship between by-value T and by-reference &T for general types
+    * Statically allocated objects are normally stored neither on the heap, nor the stack, but in their own region of memory
     * As a rule of thumb: functions that do something with a string without needing to stash it away somewhere should take &str, functions that modify the String should take String, functions that need to store it for later should take String.
     * See if you can use Arc<str> instead of String. This would make using .clone() faster because it wouldn't actually clone the strings at the cost of not being able to mutate the strings.
     * Accepting &str in your function allows the caller to call the function multiple times without reallocating the string. Whereas taking String means the caller has to give you a brand new allocation with each call (since String always manages a heap allocation).
@@ -195,4 +341,18 @@
       &str (on the stack) is much faster than String. But you cannot modify it. This is only a borrowed version of a String, which means you cannot create new &str out of nothing. You can make an analogy with &[]
 
       &'static str is the fastest one but also the less flexible: not only you cannot modify it but you need to know its value at compile time! You can make an analogy with [;N] EDIT: &'static []
+    * If you know a little more about Rust types, you may wonder why String is used instead of Box<str>
+        * The answer lies in the difference between the two types: Box<str> is a fixed‐size allocation, so you’d need to reallocate every time you push to the string, but String overallocates for efficiency in the usual case, storing a capacity member also to track that
+    * Rust “raw
+      string” syntax: the letter r, zero or more hash marks (that is, the # character), a dou‐
+      ble quote, and then the contents of the string, terminated by another double quote
+      followed by the same number of hash marks.
+        * Any character may occur within a raw
+          string without being escaped, including double quotes; in fact, no escape sequences
+          like \" are recognized.
+    
 1. async
+1. mutability
+    * let mut numbers = Vec::new();
+    Even though vectors are designed to be grown and shrunk dynamically,
+      we must still mark the variable mut for Rust to let us push numbers onto the end of it.
