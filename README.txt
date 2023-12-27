@@ -23,24 +23,109 @@
     * allocates on stack by default
     * to test online: https://play.rust-lang.org/
 1. ownership and borrowing
-    borrow
-    ```
-    let numbers = vec![10, 20, 30, 40, 50];
-    let mut d = numbers[0];
+    • You can move values from one owner to another. This allows you to build,
+    rearrange, and tear down the tree.
+    • Very simple types like integers, floating-point numbers, and characters are
+    excused from the ownership rules. These are called Copy types.
+    • The standard library provides the reference-counted pointer types Rc and Arc,
+    which allow values to have multiple owners, under some restrictions.
+    • You can “borrow a reference” to a value; references are non-owning pointers,
+    with limited lifetimes.
+    * moves
+        * In Rust, for most types, operations like assigning a value to a variable, passing it to a
+          function, or returning it from a function don’t copy the value: they move it.
+        * The
+          source relinquishes ownership of the value to the destination and becomes uninitial‐
+          ized; the destination now controls the value’s lifetime.
+        * in Rust, assignments of most types move the value from the source to
+          the destination, leaving the source uninitialized.
+            let s = vec!["udon".to_string(), "ramen".to_string(), "soba".to_string()];
+            let t = s;
+            let u = s;
+        * Passing arguments to functions moves ownership to the function’s parameters;
+        * returning a value from a
+          function moves ownership to the caller.
+        * First, the moves always apply to the value proper, not the heap storage
+          they own.
+          * For vectors and strings, the value proper is the three-word header alone; the
+            potentially large element arrays and text buffers sit where they are in the heap.
+        * Sec‐
+          ond, the Rust compiler’s code generation is good at “seeing through” all these moves;
+          in practice, the machine code often stores the value directly where it belongs.
+        * Rust
+          suggests using a reference, in case you want to access the element without moving it.
+          ```
+          let mut v = Vec::new();
+          for i in 101 .. 106 {
+          v.push(i.to_string());
+          }
+          // Pull out random elements from the vector.
+          // For this to work, Rust would somehow need to remember that the third and fifth ele‐
+             ments of the vector have become uninitialized, and track that information until the
+             vector is dropped.
+          let third = v[2]; // error: Cannot move out of index of Vec
+          let fifth = v[4]; // here too
+          ```
+    * Every value has a single owner that determines its
+      lifetime.
+      * When the owner is freed—dropped, in Rust terminology—the owned value is
+        dropped too.
+    * A variable owns its value.
+      * When control leaves the block in which the variable is
+        declared, the variable is dropped, so its value is dropped along with it.
+    * example
+        borrow
+        ```
+        let numbers = vec![10, 20, 30, 40, 50];
+        let mut d = numbers[0];
 
-    for m in &numbers[1..] { // borrow
-        d = gcd(d, *m); // borrow
-    }
-    ```
-    vs (move)
-    ```
-    for m in numbers[1..] { // drains numbers
-        d = gcd(d, m); // takes ownership
-    }
-    ```
+        for m in &numbers[1..] { // borrow
+            d = gcd(d, *m); // borrow
+        }
+        ```
+        vs (move)
+        ```
+        for m in numbers[1..] { // drains numbers
+            d = gcd(d, m); // takes ownership
+        }
+        ```
 1. packages crates modules
 1. structs
     * copy vs clone
+        * Assigning a value of a Copy type
+          copies the value, rather than moving it.
+          * Passing Copy types to functions
+            and constructors behaves similarly.
+        * Only types for which a simple bit-for-bit copy suffices can be Copy.
+            * As we’ve already
+              explained, String is not a Copy type, because it owns a heap-allocated buffer. For sim‐
+              ilar reasons, Box<T> is not Copy; it owns its heap-allocated referent.
+            * The File type, representing an operating system file handle, is not Copy; duplicating such a value
+                             would entail asking the operating system for another file handle.
+            * Similarly, the
+              MutexGuard type, representing a locked mutex, isn’t Copy: this type isn’t meaningful to
+              copy at all, as only one thread may hold a mutex at a time.
+            * As a rule of thumb, any type that needs to do something special when a value is drop‐
+              ped cannot be Copy: a Vec needs to free its elements, a File needs to close its file han‐
+              dle, a MutexGuard needs to unlock its mutex, and so on.
+            * By default, struct and enum types are not
+              Copy:
+              * If all the fields of your
+                struct are themselves Copy, then you can make the type Copy as well by placing the
+                attribute #[derive(Copy, Clone)] above the definition,
+              * However, if we try
+                this on a type whose fields are not all Copy, it doesn’t work.
+                #[derive(Copy, Clone)]
+                struct StringLabel { name: String }
+                // the trait `Copy` may not be implemented for this type
+                // this field does not implement `Copy`
+              * So making a type Copy represents a serious commitment
+                on the part of the implementer: if it’s necessary to change it to non-Copy later, much
+                of the code that uses it will probably need to be adapted.
+                * Copy types are very limited
+                  in which types they can contain, whereas non-Copy types can use heap allocation and
+                  own other sorts of resources.
+
         * Clone is designed for arbitrary duplications: a Clone implementation for a type T can do arbitrarily complicated operations required to create a new T. It is a normal trait (other than being in the prelude), and so requires being used like a normal trait, with method calls, etc.
 
           The Copy trait represents values that can be safely duplicated via memcpy: things like reassignments and passing an argument by-value to a function are always memcpys, and so for Copy types, the compiler understands that it doesn't need to consider those a move.
@@ -76,6 +161,20 @@
     * You need to ask yourself "Does the struct own this data?". If so, you go with 'static (unborrowed) fields and if not, you go with references. If ownership is shared, you go with Rc/Weak/Arc depending on the kind of ownership. And if it's possibly shared, you go with Cow.
     * I'd just default to String for struct fields (unless it's a constant string literal so that you can use &'static str. &str is easy for read-only function parameters, but it's a pain for structs, so I generally only use it if I really need it.
 1. error: unrecoverable: panic, recoverable: result
+    ```
+    let output = match File::create(filename) {
+    Ok(f) => f,
+    Err(e) => {
+    return Err(e);
+    }
+    };
+    ```
+    vs
+    ```
+    let output = File::create(filename)?;
+    ```
+    This kind of match statement is such a common pattern in Rust that the language
+    provides the ? operator as shorthand for the whole thing.
 1. traits, lifetimes
     * lifetime elision
     * utility traits
@@ -221,8 +320,151 @@
 1. closures
     || {body} when no param
     |a| {body} with param
+    * Note that, unlike functions declared with fn, we don’t need to declare the
+      types of a closure’s arguments; Rust will infer them, along with its return type.
 1. cargo
 1. references, smart pointers: box
+    * Rust permits references to references:
+        ```
+        struct Point { x: i32, y: i32 }
+        let point = Point { x: 1000, y: 729 };
+        let r: &Point = &point;
+        let rr: &&Point = &r;
+        let rrr: &&&Point = &rr;
+        ```
+        * Like the . operator, Rust’s comparison operators “see through” any number of refer‐
+          ences:
+          * the == operator follows all the references and performs
+            the comparison on their final targets, x and y.
+          * If you actually want to know
+            whether two references point to the same memory, you can use std::ptr::eq, which
+            compares them as addresses:
+            ```
+            assert!(rx == ry); // their referents are equal
+            assert!(!std::ptr::eq(rx, ry)); // but occupy different addresses
+            ```
+          * Note that the operands of a comparison must have exactly the same type, including
+            the references:
+            assert!(rx == rrx); // error: type mismatch: `&i32` vs `&&i32`
+            assert!(rx == *rrx); // this is okay
+    * Rust references are never null.
+    * But you might recall that, when we fixed the show function to take the table of artists
+      by reference instead of by value, we never had to use the * operator.
+      * Since references are so widely used in Rust, the . operator implicitly dereferences its
+        left operand
+      The . operator can also implicitly borrow a reference to its left operand, if needed for
+      a method call.
+    * When we pass a value to a function in a way that moves ownership of the value to the
+      function, we say that we have passed it by value.
+    * If we instead pass the function a ref‐
+      erence to the value, we say that we have passed the value by reference.
+    * The right way to handle this is to use references. A reference lets you access a value
+      without affecting its ownership.
+      * example with hashmap
+      * References come in two kinds:
+        • A shared reference lets you read but not modify its referent. However, you can
+        have as many shared references to a particular value at a time as you like. The
+        expression &e yields a shared reference to e’s value; if e has the type T, then &e has
+        the type &T, pronounced “ref T.” Shared references are Copy.
+        • If you have a mutable reference to a value, you may both read and modify the
+        value. However, you may not have any other references of any sort to that value
+        active at the same time. The expression &mut e yields a mutable reference to e’s
+        value; you write its type as &mut T, which is pronounced “ref mute T.” Mutable
+        references are not Copy.
+        * You can think of the distinction between shared and mutable references as a way to
+          enforce a multiple readers or single writer rule at compile time.
+          * In fact, this rule doesn’t
+            apply only to references; it covers the borrowed value’s owner as well.
+          * well. As long as there
+            are shared references to a value, not even its owner can modify it; the value is locked
+            down.
+          * Nobody can modify table while show is working with it.
+    * Rust also has non-owning pointer types called ref‐
+      erences, which have no effect on their referents’ lifetimes.
+      * references must never outlive their referents.
+      * You must
+        make it apparent in your code that no reference can possibly outlive the value it
+        points to.
+      * To emphasize this, Rust refers to creating a reference to some value as bor‐
+        rowing the value: what you have borrowed, you must eventually return to its owner.
+    * A reference-counting loop; these objects will not be freed
+        * It is possible to leak values in Rust this way, but such situations are rare. You cannot
+          create a cycle without, at some point, making an older value point to a newer value.
+          This obviously requires the older value to be mutable. Since Rc pointers hold their
+          referents immutable, it’s not normally possible to create a cycle.
+          * interior mutability
+            * If you com‐
+              bine those techniques with Rc pointers, you can create a cycle and leak memory.
+            * You can sometimes avoid creating cycles of Rc pointers by using weak pointers,
+              std::rc::Weak, for some of the links instead.
+    * Box<T>
+        * A Box<T> is a pointer to a
+          value of type T stored on the heap. Calling Box::new(v) allocates some heap space,
+          moves the value v into it, and returns a Box pointing to the heap space.
+
+    * fat pointers
+    * In
+      Java, if class Rectangle contains a field Vector2D upperLeft;, then upperLeft is a
+      reference to another separately created Vector2D object. Objects never physically
+      contain other objects in Java.
+    * References
+        * A value of type &String (pronounced “ref String”) is a reference to a String value, a
+          &i32 is a reference to an i32, and so on.
+        * It’s easiest to get started by thinking of references as Rust’s basic pointer type.
+        * At run
+          time, a reference to an i32 is a single machine word holding the address of the i32,
+          which may be on the stack or in the heap.
+        * The expression &x produces a reference to
+          x; in Rust terminology, we say that it borrows a reference to x.
+        * Given a reference r, the
+          expression *r refers to the value r points to.
+        * Unlike C pointers, however, Rust references are never null: there is simply no way to
+          produce a null reference in safe Rust.
+        * And unlike C, Rust tracks the ownership and
+          lifetimes of values, so mistakes like dangling pointers, double frees, and pointer inva‐
+          lidation are ruled out at compile time.
+        * Rust references come in two flavors:
+            * &T
+                * An immutable, shared reference.
+                * You can have many shared references to a given
+                  value at a time, but they are read-only: modifying the value they point to is for‐
+                  bidden, as with const T* in C.
+            * &mut T
+                * A mutable, exclusive reference.
+                * You can read and modify the value it points to, as
+                  with a T* in C.
+                * But for as long as the reference exists, you may not have any other
+                  references of any kind to that value.
+                * Rust uses this dichotomy between shared and mutable references to enforce a “single
+                  writer or multiple readers” rule: either you can read and write the value, or it can be
+                  shared by any number of readers, but never both at the same time.
+    * Boxes
+        * The simplest way to allocate a value in the heap is to use Box::new:
+        * When b goes
+          out of scope, the memory is freed immediately, unless b has been moved—by return‐
+          ing it, for example.
+            * let b = Box::new(t);
+        * Moves are essential to the way Rust handles heap-allocated values;
+    * Raw Pointers
+        * Rust also has the raw pointer types *mut T and *const T.
+        * Raw pointers really are just
+          like pointers in C++.
+        * Using a raw pointer is unsafe, because Rust makes no effort to
+          track what it points to.
+        * For example, raw pointers may be null, or they may point to
+          memory that has been freed or that now contains a value of a different type.
+        * However, you may only dereference raw pointers within an unsafe block.
+    * The types &[T] and &mut [T], called a shared slice of Ts and mutable slice of Ts, are
+      references to a series of elements that are a part of some other value, like an array
+      or vector.
+      * You can think of a slice as a pointer to its first element, together with a
+        count of the number of elements you can access starting at that point.
+
+    * std::mem::swap
+        fn swap<T>(x: &mut T, y: &mut T); // shorthand for -> ()
+        The standard
+        library’s std::mem::swap function has no meaningful return value; it just exchanges
+        the values of its two arguments.
     * all you need to know is that &x borrows a reference to x, and
       that *r is the value that the reference r refers to.
     * What if Command / Query separation is the answer? When you run a command to change data, move the memory around (no reference &); when you run a query to read data, use references.
@@ -292,6 +534,45 @@
 
 8. pattern matching
 1. String vs str
+    * String literals are enclosed in double quotes.
+        * let speech = "\"Ouch!\" said the well.\n";
+    * Rust strings are sequences of Unicode characters, but they are not stored in memory
+      as arrays of chars.
+      * Instead, they are stored using UTF-8, a variable-width encoding.
+      * Each ASCII character in a string is stored in one byte.
+      * A String has a resizable buffer holding UTF-8 text.
+      * The buffer is allocated on the
+        heap, so it can resize its buffer as needed or requested.
+      * You can think of a String as a Vec<u8> that is guaranteed to hold well-formed UTF-8;
+        * in fact, this is how String is implemented.
+    * A &str (pronounced “stir” or “string slice”) is a reference to a run of UTF-8 text
+      owned by someone else: it “borrows” the text.
+      * Like other slice references, a &str is a fat pointer, containing both the
+        address of the actual data and its length.
+      * The type &mut str does exist, but it is not very useful, since almost any operation on
+        UTF-8 can change its overall byte length, and a slice cannot reallocate its referent.
+        * In
+          fact, the only operations available on &mut str are make_ascii_uppercase and
+          make_ascii_lowercase, which modify the text in place and affect only single-byte
+          characters, by definition.
+    * &str is very much like &[T]: a fat pointer to some data. String is analogous to
+      Vec<T>,
+    * There are several ways to create Strings:
+        * The .to_string() method converts a &str to a String. This copies the string:
+          let error_message = "too many pets".to_string();
+          The .to_owned() method does the same thing, and you may see it used the same
+          way. It works for some other types as well,
+        * The format!() macro works just like println!(), except that it returns a new
+          String instead of writing text to stdout, and it doesn’t automatically add a new‐
+          line at the end:
+        * Arrays, slices, and vectors of strings have two methods, .concat()
+          and .join(sep), that form a new String from many strings:
+    * Keep in mind that, given the nature of Unicode, simple char-by-char comparison
+      does not always give the expected answers.
+      * For example, the Rust strings "th\u{e9}"
+        and "the\u{301}" are both valid Unicode representations for thé, the French word
+        for tea. Unicode says they should both be displayed and processed in the same way,
+        but Rust treats them as two completely distinct strings.
     * So what is a String? That's three words; two are the same as for &str but it adds a third word which is the capacity of the str buffer on the heap, always on the heap (a str is not necessarily on the heap) it manages before it's filled and has to re-allocate. the String basically owns a str as they say; it controls it and can resize it and reallocate it when it sees fit. So a String is as said closer to a &str than to a str.
     * Another thing is a Box<str>; this also owns a str and its runtime representation is the same as a &str but it also owns the str unlike the &str but it cannot resize it because it does not know its capacity so basically a Box<str> can be seen as a fixed-length String that cannot be resized (you can always convert it into a String if you want to resize it).
     * &str is super useful to be able to to have multiple different substrings of a String without having to copy; as said a String owns the str on the heap it manages and if you could only create a substring of a String with a new String it would have to be copied because everything in Rust can only have one single owner to deal with memory safety. So for instance you can slice a string:
@@ -350,9 +631,43 @@
         * Any character may occur within a raw
           string without being escaped, including double quotes; in fact, no escape sequences
           like \" are recognized.
-    
 1. async
 1. mutability
     * let mut numbers = Vec::new();
     Even though vectors are designed to be grown and shrunk dynamically,
       we must still mark the variable mut for Rust to let us push numbers onto the end of it.
+1. debug vs Display
+    * The #[derive(Debug)] attribute tells the compiler to generate some extra code that
+      allows us to format the Arguments struct with {:?} in println!.
+1. collections
+    * A Vec<T> consists of three values: a pointer to the heap-allocated buffer for the ele‐
+      ments, which is created and owned by the Vec<T>; the number of elements that buffer
+      has the capacity to store; and the number it actually contains now (in other words, its
+      length).
+        * When the buffer has reached its capacity, adding another element to the vec‐
+          tor entails allocating a larger buffer, copying the present contents into it, updating the
+          vector’s pointer and capacity to describe the new buffer, and finally freeing the old
+          one.
+        * popping a value from a Vec<T> returns an Option<T>: None if the vector was already
+          empty, or Some(v) if its last element had been v:
+    * Slices
+        * A slice, written [T] without specifying the length, is a region of an array or vector.
+        * A reference to a slice is a fat pointer: a two-word value comprising a pointer to the
+          slice’s first element, and the number of elements in the slice.
+        * a reference
+          to a slice is a non-owning pointer to a range of consecutive values in memory.
+        * fn print(n: &[f64]) { // you can apply it to either a vector or an array,
+            print(&a); // works on arrays
+            print(&v); // works on vectors
+        * shown. In fact, many methods you might think of as belonging
+          to vectors or arrays are methods defined on slices: for example, the sort and reverse
+          methods, which sort or reverse a sequence of elements in place, are actually methods
+          on the slice type [T].
+    * HashMap
+        * for (artist, works) in table
+        * In particular, HashMap is not Copy—it can’t be, since it
+          owns a dynamically allocated table.
+        * Iterating over a
+          shared reference to a HashMap is defined to produce shared references to each entry’s
+          key and value: artist has changed from a String to a &String, and works from a
+          Vec<String> to a &Vec<String>.
