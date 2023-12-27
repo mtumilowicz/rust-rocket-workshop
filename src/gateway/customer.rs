@@ -41,13 +41,12 @@ pub async fn create_customer(
     customer_service: &rocket::State<CustomerService>,
 ) -> Result<Created<Json<CustomerApiOutput>>, Custom<&'static str>> {
     let new_customer: NewCustomerCommand = request.into_inner().into();
-    match customer_service.create(new_customer).await {
-        Ok(customer) =>  {
+    customer_service.create(new_customer).await
+        .map(|customer| {
             let output: CustomerApiOutput = customer.into();
-            Ok(Created::new(output.id.to_string()).body(Json(output)))
-        },
-        Err(customer_error) => Err(map_customer_error(customer_error)),
-    }
+            Created::new(output.id.to_string()).body(Json(output))
+        })
+        .map_err(map_customer_error)
 }
 
 #[get("/customers/<customer_id>")]
