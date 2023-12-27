@@ -176,6 +176,28 @@
     This kind of match statement is such a common pattern in Rust that the language
     provides the ? operator as shorthand for the whole thing.
 1. traits, lifetimes
+    * lifetime
+        * Rust tries to assign each reference type in your program a lifetime that meets the con‐
+          straints imposed by how it is used.
+        * A lifetime is some stretch of your program for
+          which a reference could be safe to use: a statement, an expression, the scope of some
+          variable, or the like.
+        * Lifetimes are entirely figments of Rust’s compile-time imagina‐
+          tion.
+            * At run time, a reference is nothing but an address; its lifetime is part of its type
+              and has no run-time representation.
+        * example
+            ```
+            let v = vec![1, 2, 3];
+            let r = &v[1];
+            ```
+            max limit: the lifetime of v must enclose that
+            of the reference type of &v[1]
+            min limit: if you store a reference in some data struc‐
+            ture, its lifetime must enclose that of the data structure
+        * Conversely, if we do see a function with a signature like g(p: &i32) (or with the life‐
+          times written out, g<'a>(p: &'a i32)), we can tell that it does not stash its argument
+          p anywhere that will outlive the call.
     * lifetime elision
     * utility traits
         * Any type that implements the
@@ -324,6 +346,15 @@
       types of a closure’s arguments; Rust will infer them, along with its return type.
 1. cargo
 1. references, smart pointers: box
+    * However, Rust also
+      includes two kinds of fat pointers, two-word values carrying the address of some
+      value, along with some further information necessary to put the value to use.
+      * A reference to a slice is a fat pointer, carrying the starting address of the slice and its
+        length.
+      * Rust’s other kind of fat pointer is a trait object, a reference to a value that implements
+        a certain trait.
+        * A trait object carries a value’s address and a pointer to the trait’s imple‐
+          mentation appropriate to that value, for invoking the trait’s methods.
     * Rust permits references to references:
         ```
         struct Point { x: i32, y: i32 }
@@ -348,6 +379,8 @@
             assert!(rx == rrx); // error: type mismatch: `&i32` vs `&&i32`
             assert!(rx == *rrx); // this is okay
     * Rust references are never null.
+    * Rust won’t convert integers to references
+      (outside of unsafe code), so you can’t convert zero into a reference.
     * But you might recall that, when we fixed the show function to take the table of artists
       by reference instead of by value, we never had to use the * operator.
       * Since references are so widely used in Rust, the . operator implicitly dereferences its
