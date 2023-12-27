@@ -19,6 +19,18 @@ fn test<T>(data: Arc<RwLock<T>>)
     handle.join().unwrap();
 }
 
+struct MyStruct {
+    data: String,
+}
+
+// fn create_struct() -> &'static MyStruct {
+//     let my_struct = MyStruct {
+//         data: String::from("Hello, Rust!"),
+//     };
+//
+//     &my_struct // Error: Cannot return reference to temporary value
+// }
+
 
 fn main() {
 
