@@ -1,7 +1,7 @@
 use rocket::{launch, routes};
 use serde_derive::Serialize;
 use crate::domain::customer::{Customer, CustomerService, NewCustomerCommand};
-use infrastructure::customer_config::CustomerInMemoryRepository;
+use crate::infrastructure::customer_config::CustomerInMemoryRepository;
 use domain::id::{IdRepository, IdService};
 use crate::infrastructure::id_config::{DeterministicRepository, UuidRepository};
 use crate::gateway::customer::{create_customer, get_customer};
