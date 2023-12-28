@@ -85,7 +85,7 @@ impl CustomerService {
 }
 
 #[derive(Debug)]
-pub(crate) enum CustomerError {
+pub enum CustomerError {
     CustomerAlreadyExist,
 }
 
