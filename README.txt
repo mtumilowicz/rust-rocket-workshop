@@ -23,6 +23,21 @@
     * allocates on stack by default
     * to test online: https://play.rust-lang.org/
 1. ownership and borrowing
+    * Paring these principles down to the simplest possible examples:
+      let mut x = 10;
+      let r1 = &x;
+      let r2 = &x; // ok: multiple shared borrows permitted
+      x += 10; // error: cannot assign to `x` because it is borrowed
+      let m = &mut x; // error: cannot borrow `x` as mutable because it is
+      // also borrowed as immutable
+      println!("{}, {}, {}", r1, r2, m); // the references are used here,
+      // so their lifetimes must last
+      // at least this long
+
+      let mut y = 20;
+      let m1 = &mut y;
+      let m2 = &mut y; // error: cannot borrow as mutable more than once
+      let z = y; // error: cannot use `y` because it was mutably borrowed
     • You can move values from one owner to another. This allows you to build,
     rearrange, and tear down the tree.
     • Very simple types like integers, floating-point numbers, and characters are
@@ -89,7 +104,61 @@
             d = gcd(d, m); // takes ownership
         }
         ```
-1. packages crates modules
+1. crate, cargo, modules
+    * Each crate is a complete, cohesive unit: all the
+      source code for a single library or executable, plus any associated tests, examples,
+
+      tools, configuration, and other junk.
+    * Cargo.toml
+        [dependencies]
+        num = "0.4"
+        image = "0.13"
+        crossbeam = "0.8"
+    * use num::Complex;
+      // ...
+      use image::ColorType;
+      use image::png::PNGEncoder;
+    * We found these crates on crates.io, the Rust community’s site for open
+      source crates.
+    * transitive dependencies
+    * To evolve without breaking existing code, Rust uses editions.
+        * The 2015 edition of Rust
+          is compatible with Rust 1.0. The 2018 edition changed async and await into key‐
+          words, streamlined the module system, and introduced various other language
+          changes that are incompatible with the 2015 edition.
+        * programs can freely mix crates written in different editions.
+            * It’s even fine for a
+              2015 edition crate to depend on a 2018 edition crate.
+            * In other words, a crate’s edition
+              only affects how its source code is construed; edition distinctions are gone by the
+              time the code has been compiled.
+            * This means there’s no pressure to update old crates
+              just to continue to participate in the modern Rust ecosystem.
+        [package]
+      name = "rust-rocket-workshop"
+      version = "0.1.0"
+      edition = "2021"
+    * modules
+        * They act as Rust’s namespaces, containers for the func‐
+          tions, types, constants, and so on that make up your Rust program or library.
+        * mod spores {
+
+          }
+        * The pub keyword makes an item public, so it can be
+          accessed from outside the module.
+        * One function is marked pub(crate), meaning that it is available anywhere inside this
+          crate, but isn’t exposed as part of the external interface.
+          * It can’t be used by other
+            crates, and it won’t show up in this crate’s documentation.
+        * Anything that isn’t marked pub is private and can only be used in the same module in
+          which it is defined, or any child modules:
+        * Modules can nest, and it’s fairly common to see a module that’s just a collection of
+          submodules
+        * It’s also possible to specify pub(super), making an item visible to the parent module
+          only, and pub(in <path>), which makes it visible in a specific parent module and its
+          descendants.
+        * A module can have its own directory. When Rust sees mod spores;, it checks for
+          both spores.rs and spores/mod.rs; if neither file exists, or both exist, that’s an error.
 1. structs
     * copy vs clone
         * Assigning a value of a Copy type
@@ -161,6 +230,11 @@
     * You need to ask yourself "Does the struct own this data?". If so, you go with 'static (unborrowed) fields and if not, you go with references. If ownership is shared, you go with Rc/Weak/Arc depending on the kind of ownership. And if it's possibly shared, you go with Cow.
     * I'd just default to String for struct fields (unless it's a constant string literal so that you can use &'static str. &str is easy for read-only function parameters, but it's a pain for structs, so I generally only use it if I really need it.
 1. error: unrecoverable: panic, recoverable: result
+    * // Errors should implement the std::error::Error trait,
+      // but the default definitions for the Error methods are fine.
+      impl std::error::Error for JsonError { }
+    * The #[derive(Error)] directive tells thiserror to generate the code shown earlier,
+      which can save a lot of time and effort.
     ```
     let output = match File::create(filename) {
     Ok(f) => f,
@@ -175,6 +249,40 @@
     ```
     This kind of match statement is such a common pattern in Rust that the language
     provides the ? operator as shorthand for the whole thing.
+    * Panic
+        * Panic is for the other kind of error, the kind that should never happen.
+        * • Calling .expect() on a Result that happens to be Err
+        * Integer division by zero
+        * (There’s also the macro panic!(), for cases where your own code discovers that it has
+          gone wrong, and you therefore need to trigger a panic directly. panic!() accepts
+          optional println!()-style arguments, for building an error message.)
+        * A good rule of thumb is: “Don’t panic.”
+        * It’s more like a RuntimeException in Java
+        * Panic is per thread. One thread can be panicking while other threads are going on
+          about their normal business.
+          * If the panicking thread was the main thread, then the
+            whole process exits (with a nonzero exit code).
+        * There is also a way to catch stack unwinding, allowing the thread to survive and con‐
+          tinue running.
+            * The standard library function std::panic::catch_unwind() does
+              this.
+            * this is the mechanism used by Rust’s test har‐
+              ness to recover when an assertion fails in a test.
+    * Aborting
+        * Also, Rust’s panic behavior is customizable. If you compile with -C panic=abort, the
+          first panic in your program immediately aborts the process.
+    * Result
+        * fn get_weather(location: LatLng) -> Result<WeatherReport, io::Error>
+        * Rust’s equivalent of try/catch in other languages
+            match get_weather(hometown) {
+            Ok(report) => {
+            display_weather(hometown, &report);
+            }
+            Err(err) => {
+            println!("error querying the weather: {}", err);
+            schedule_weather_retry();
+            }
+            }
 1. traits, lifetimes
     * lifetime
         * Rust tries to assign each reference type in your program a lifetime that meets the con‐
@@ -198,7 +306,26 @@
         * Conversely, if we do see a function with a signature like g(p: &i32) (or with the life‐
           times written out, g<'a>(p: &'a i32)), we can tell that it does not stash its argument
           p anywhere that will outlive the call.
+        * When a func‐
+          tion takes a single reference as an argument and returns a single reference, Rust
+          assumes that the two must have the same lifetime.
+          * fn smallest<'a>(v: &'a [i32]) -> &'a i32 { ... }
+        * This says that r can only refer to i32 values that will last for the lifetime of the pro‐
+          gram, which is rather limiting.
+            struct S {
+            r: &'static i32
+            }
+        * Every type in Rust has a
+          lifetime, including i32 and String.
+          * Most are simply 'static, meaning that values of
+            those types can live for as long as you like; for example, a Vec<i32> is self-contained
+            and needn’t be dropped before any particular variable goes out of scope.
+          * But a type
+            like Vec<&'a i32> has a lifetime that must be enclosed by 'a: it must be dropped
+            while its referents are still alive.
     * lifetime elision
+        * In the simplest cases, you may never need to write out lifetimes for your parameters.
+          Rust just assigns a distinct lifetime to each spot that needs one.
     * utility traits
         * Any type that implements the
             FromStr trait has a from_str method that tries to parse a value of that type from a
@@ -216,6 +343,7 @@
                 * For example, Rc is not Send, because it uses non-atomic operations to manage its reference count, which would lead to a data race if an Rc were moved to another thread.
                 * Similarly, RefCell is not Sync, because it allows unsynchronized mutation of its state.
             * You can read the hashmap, string and pretty much any other ‘simple’ structure concurrently from as many threads as you’d like. At the same time, if you have an exclusive reference, you can modify such structures from whatever thread because there’s only one thread accessing it.
+        * Deref
     * macros (derev)
     * static dispatch
         * Static dispatch is not something Go or Java have.
@@ -344,6 +472,16 @@
     |a| {body} with param
     * Note that, unlike functions declared with fn, we don’t need to declare the
       types of a closure’s arguments; Rust will infer them, along with its return type.
+    * For example, the function
+      cmp_by_timestamp_then_name could not use v directly. (Rust also has closures, which
+      do see into enclosing scopes.
+        let mut v = vec![];
+        ...
+        fn cmp_by_timestamp_then_name(a: &FileInfo, b: &FileInfo) -> Ordering {
+        a.timestamp.cmp(&b.timestamp) // first, compare timestamps
+        .reverse() // newest file first
+        .then(a.path.cmp(&b.path)) // compare paths to break ties
+        }
 1. cargo
 1. references, smart pointers: box
     * However, Rust also
@@ -565,7 +703,8 @@
         * However, only a pointer is not enough - additional information is needed, for example, length for slices or a pointer to a virtual methods table for trait objects.
         * This information is "embedded" in pointers to unsized types, making these pointers "fat".
 
-8. pattern matching
+1. pattern matching
+    * Rust prohibits match expressions that do not cover all possible values:
 1. String vs str
     * String literals are enclosed in double quotes.
         * let speech = "\"Ouch!\" said the well.\n";
@@ -666,9 +805,25 @@
           like \" are recognized.
 1. async
 1. mutability
+    * Iterating over a mut reference provides a mut reference to each element:
+        for rs in &mut strings { // the type of rs is &mut String
+        rs.push('\n'); // add a newline to each string
+        }
     * let mut numbers = Vec::new();
     Even though vectors are designed to be grown and shrunk dynamically,
       we must still mark the variable mut for Rust to let us push numbers onto the end of it.
+    * Rust’s rules for mutation and sharing:
+      Shared access is read-only access.
+      Values borrowed by shared references are read-only. Across the lifetime of a
+      shared reference, neither its referent, nor anything reachable from that referent,
+      can be changed by anything. There exist no live mutable references to anything in
+      that structure, its owner is held read-only, and so on. It’s really frozen.
+      Mutable access is exclusive access.
+      A value borrowed by a mutable reference is reachable exclusively via that refer‐
+      ence. Across the lifetime of a mutable reference, there is no other usable path to
+      its referent or to any value reachable from there. The only references whose life‐
+      times may overlap with a mutable reference are those you borrow from the muta‐
+      ble reference itself.
 1. debug vs Display
     * The #[derive(Debug)] attribute tells the compiler to generate some extra code that
       allows us to format the Arguments struct with {:?} in println!.
@@ -704,3 +859,66 @@
           shared reference to a HashMap is defined to produce shared references to each entry’s
           key and value: artist has changed from a String to a &String, and works from a
           Vec<String> to a &Vec<String>.
+1. syntax
+    * shadowing of let
+    * if let
+        if let pattern = expr {
+        block1
+        } else {
+        block2
+        }
+        The given expr either matches the pattern, in which case block1 runs, or doesn’t
+        match, and block2 runs.
+        * example
+            if let Some(cookie) = request.session_cookie {
+            return restore_session(cookie);
+            }
+        * An if let expression is shorthand for a match with just one pattern:
+          match expr {
+          pattern => { block1 }
+          _ => { block2 }
+          }
+    * return without a value is shorthand for return ():
+        * The body of a function
+          works like a block expression: if the last expression isn’t followed by a semicolon, its
+          value is the function’s return value.
+        * the ? operator to
+          check for errors after calling a function that can fail:
+          let output = File::create(filename)?;
+          We explained that this is shorthand for a match expression:
+          let output = match File::create(filename) {
+          Ok(f) => f,
+          Err(err) => return Err(err)
+          };
+    * Expressions that don’t finish
+      normally are assigned the special type !, and they’re exempt from the rules about
+      types having to match.
+      fn exit(code: i32) -> !
+      The ! means that exit() never returns. It’s a divergent function.
+      fn serve_forever(socket: ServerSocket, handler: ServerHandler) -> ! {
+        socket.listen();
+        loop {
+        let s = socket.accept();
+        handler.handle(s);
+        }
+      }
+    * dot
+        * The unary * operator is used to access the value pointed to by a reference. As we’ve
+          seen, Rust automatically follows references when you use the . operator to access a
+          field or method, so the * operator is necessary only when we want to read or write the
+          entire value that the reference points to.
+    * Converting a value from one type to another usually requires an explicit cast in Rust.
+        • Values of type &String auto-convert to type &str without a cast.
+        • Values of type &Vec<i32> auto-convert to &[i32].
+        • Values of type &Box<Chessboard> auto-convert to &Chessboard.
+    * ?
+        * ? also works similarly with the Option type. In a function that returns Option, you
+          can use ? to unwrap a value and return early in the case of None:
+          let weather = get_weather(hometown).ok()?;
+    * you can also change the type signature of main() to return a Result type,
+      so you can use ?:
+      fn main() -> Result<(), TideCalcError> {
+      let tides = calculate_tides()?;
+      print_tides(tides);
+      Ok(())
+      }
