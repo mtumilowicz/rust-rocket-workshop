@@ -22,6 +22,13 @@
 1. general
     * allocates on stack by default
     * to test online: https://play.rust-lang.org/
+    * Rust’s default hashing algorithm is a well-known algorithm called SipHash-1-3.
+      SipHash is fast, and it’s very good at minimizing hash collisions.
+        * In fact, it’s a crypto‐
+          graphic algorithm: there’s no known efficient way to generate SipHash-1-3 collisions.
+        * As long as a different, unpredictable key is used for each hash table, Rust is secure
+          against a kind of denial-of-service attack called HashDoS, where attackers deliber‐
+          ately use hash collisions to trigger worst-case performance in a server.
 1. ownership and borrowing
     * Paring these principles down to the simplest possible examples:
       let mut x = 10;
@@ -105,6 +112,31 @@
         }
         ```
 1. crate, cargo, modules
+    * Cargo.lock
+        * The first time you build a
+          project, Cargo outputs a Cargo.lock file that records the exact version of every crate it
+          used.
+        * Later builds will consult this file and continue to use the same versions.
+        * if your project is an executable, you should commit Cargo.lock to ver‐
+          sion control.
+          * That way, everyone who builds your project will consistently get the
+            same versions.
+        * If your project is an ordinary Rust library, don’t bother committing Cargo.lock. Your
+          library’s downstream users will have Cargo.lock files that contain version information
+          for their entire dependency graph; they will ignore your library’s Cargo.lock file.
+        * reason
+            * The version numbers in Cargo.toml are deliberately flexible, yet we don’t want Cargo
+              to upgrade us to the latest library versions every time we build. Imagine being in the
+              middle of an intense debugging session when suddenly cargo build upgrades you to
+              a new version of a library.
+    * When you write something like image = "0.13.0" in your Cargo.toml file, Cargo
+      interprets this rather loosely.
+      * It uses the most recent version of image that is consid‐
+        ered compatible with version 0.13.0.
+      * Suppose one library, libA, used
+        num = "0.1.31" while another, libB, used num = "0.1.29". If version numbers
+        required exact matches, no project would be able to use those two libraries together.
+        Allowing Cargo to use any compatible version is a much more practical default.
     * Each crate is a complete, cohesive unit: all the
       source code for a single library or executable, plus any associated tests, examples,
 
@@ -159,7 +191,83 @@
           descendants.
         * A module can have its own directory. When Rust sees mod spores;, it checks for
           both spores.rs and spores/mod.rs; if neither file exists, or both exist, that’s an error.
+        * These three options—modules in their own file, modules in their own directory with
+          a mod.rs, and modules in their own file with a supplementary directory containing
+          submodules
+        * The :: operator is used to access features of a module.
+            std::mem::swap(&mut s1, &mut s2);
+            * std is the name of the standard library.
+            * The alternative is to import features into
+              the modules where they’re used:
+              use std::mem;
+              mem::swap(&mut s1, &mut s2);
+        * use crate::proteins::AminoAcid; // explicitly import relative to crate root
+        * Modules aren’t the same thing as files, but there is a natural analogy between modules
+          and the files and directories of a Unix filesystem.
+            * The use keyword creates aliases, just
+              as the ln command creates links.
+            * Paths, like filenames, come in absolute and relative
+              forms. self and super are like the . and .. special directories.
+        * For one thing, the standard library std is automatically linked with every project.
+            * Furthermore, a few particularly
+              handy names, like Vec and Result, are included in the standard prelude and automat‐
+              ically imported.
+            * Rust behaves as though every module, including the root module,
+              started with the following import:
+              use std::prelude::v1::*;
+        * In addition to functions, types, and nested modules, modules can also define con‐
+          stants and statics.
 1. structs
+    * Rust has three kinds of struct types, named-field, tuple-like, and unit-like,
+        * named
+            struct GrayscaleMap {
+            pixels: Vec<u8>,
+            size: (usize, usize)
+            }
+        * Tuple-Like
+            struct Bounds(usize, usize);
+            assert_eq!(image_bounds.0 * image_bounds.1, 786432);
+            * Tuple-like structs are good for newtypes, structs with a single component that you
+              define to get stricter type checking.
+        * Unit-Like Structs
+            * struct Onesuch;
+            * A value of such a type occupies no memory, much like the unit type ()
+    * let mut broom1 = Broom { height: b.height / 2, .. b };
+            ..b destructurization
+    * In memory, both named-field and tuple-like structs are the same thing: a collection of
+      values, of possibly mixed types, laid out in a particular way in memory.
+      * Rust doesn’t make specific promises about how it will order a
+        struct’s fields or elements in memory;
+      * Rust does promise to store fields’ values directly in the struct’s block
+        of memory.
+      * Whereas JavaScript, Python, and Java would put the pixels and size
+        values each in their own heap-allocated blocks and have GrayscaleMap’s fields point
+        at them, Rust embeds pixels and size directly in the GrayscaleMap value.
+    * An impl block is simply a collection of fn definitions, each of which becomes a
+      method on the struct type named at the top of the block.
+      pub fn push(&mut self, c: char) {
+      * Unlike C++ and Java, where the members of the “this” object are
+        directly visible in method bodies as unqualified identifiers, a Rust method must
+        explicitly use self to refer to the value it was called on, similar to the way Python
+        methods use self, and the way JavaScript methods use this.
+      pub fn split(self) -> (Vec<char>, Vec<char>) {
+        * if a method wants to take ownership of self, it can take self by value
+      pub fn new() -> Queue {
+        * Type-Associated Functions
+    * Although you can have many separate impl blocks for a single type, they must all be
+      in the same crate that defines that type.
+    impl Vector2 {
+    const ZERO: Vector2 = Vector2 { x: 0.0, y: 0.0 };
+    const UNIT: Vector2 = Vector2 { x: 1.0, y: 0.0 };
+    }
+    * As another shorthand,
+      every impl block, generic or not, defines the special type parameter Self (note the
+      CamelCase name) to be whatever type we’re adding methods to.
+    * if a struct type con‐
+      tains references, you must name those references’ lifetimes.
+    * A struct’s fields, even private fields, are accessible throughout the module where the
+      struct is declared, and its submodules. Outside the module, only public fields are
+      accessible.
     * copy vs clone
         * Assigning a value of a Copy type
           copies the value, rather than moving it.
@@ -284,6 +392,98 @@
             }
             }
 1. traits, lifetimes
+    * Rust takes a fresh
+      approach inspired by Haskell’s typeclasses.
+      * Traits are Rust’s take on interfaces or abstract base classes.
+    * We’ll use them
+      to add extension methods to existing types, even built-in types like str and bool.
+    * So we’ll also talk about how &mut
+      dyn Write and <T: Write> are similar, how they’re different, and how to choose
+      between these two ways of using traits.
+    * Rust has this rule because, as we’ll see later in this chapter, you can use traits to add
+      new methods to any type—even standard library types like u32 and str.
+      * use std::io::Write; // the trait itself must be in scope.
+    * There are two ways of using traits to write polymorphic code in Rust: trait objects and
+      generics.
+      * let writer: dyn Write = buf; // error: `Write` does not have a constant size
+        * A variable’s size has to be known at compile time, and types that implement Write
+          can be any size.
+        * let mut buf: Vec<u8> = vec![];
+          let writer: &mut dyn Write = &mut buf; // ok, references are explicit:
+    * In memory, a trait object is a fat pointer consisting of a pointer to the value, plus a
+      pointer to a table representing that value’s type.
+      * C++ has this kind of run-time type information as well. It’s called a virtual table, or
+        vtable. In Rust, as in C++, the vtable is generated once, at compile time, and shared by
+        all objects of the same type.
+    * Rust automatically converts ordinary references into trait objects when needed.
+        * Likewise, Rust will happily convert a Box<File> to a Box<dyn Write>
+        * What the compiler is
+          actually doing here is very simple. At the point where the conversion happens, Rust
+          knows the referent’s true type (in this case, File), so it just adds the address of the
+          appropriate vtable, turning the regular pointer into a fat pointer.
+    * extension methods
+        * Rust lets you implement any trait on any type, as long as either the trait or the type is
+          introduced in the current crate.
+        * trait IsEmoji {
+          fn is_emoji(&self) -> bool;
+          }
+          /// Implement IsEmoji for the built-in character type.
+          impl IsEmoji for char {
+          fn is_emoji(&self) -> bool {
+          ...
+          }
+          }
+        * Implementing the trait for all writers makes it an extension trait, adding a method to
+          all Rust writers:
+          impl<W: Write> WriteHtml for W
+        * We said earlier that when you implement a trait, either the trait or the type must be
+          new in the current crate.
+          * This is called the orphan rule.
+          * Your code can’t impl Write for u8, because both
+            Write and u8 are defined in the standard library.
+        * A trait can use the keyword Self as a type.
+            pub trait Clone {
+            fn clone(&self) -> Self;
+            ...
+            }
+            * Using Self as the return type here means that the type of x.clone() is the same as
+              the type of x, whatever that might be.
+            * If x is a String, then the type of x.clone() is
+              String—not dyn Clone or any other cloneable type.
+            * A trait that uses the Self type is incompatible with trait objects:
+                // error: the trait `Spliceable` cannot be made into an object
+                fn splice_anything(left: &dyn Spliceable, right: &dyn Spliceable) {
+                let combo = left.splice(right); // Rust has no way to know at compile time if left and right will be the
+                                                   same type, as required.
+                // ...
+                }
+            * more
+              advanced features of traits are useful, but they can’t coexist with trait objects because
+              with trait objects, you lose the type information Rust needs to type-check your
+              program.
+        * We can declare that a trait is an extension of another trait:
+            trait Creature: Visible
+            In fact, Rust’s subtraits are really just a shorthand for a bound on Self.
+            trait Creature where Self: Visible
+        * impl Trait
+            * Rust has a feature called impl Trait designed for precisely this situation.
+            * allows us to “erase” the type of a return value, specifying only the trait or traits it
+              implements, without dynamic dispatch or a heap allocation:
+              fn cyclical_zip(v: Vec<u8>, u: Vec<u8>) -> impl Iterator<Item=u8> {
+              v.into_iter().chain(u.into_iter()).cycle()
+              }
+            * impl
+              Trait is a form of static dispatch, so the compiler has to know the type being
+              returned from the function at compile time in order to allocate the right amount of
+              space on the stack and correctly access fields and methods on that type.
+              fn make_shape(shape: &str) -> impl Shape {
+              match shape {
+              "circle" => Circle::new(),
+              "triangle" => Triangle::new(), // error: incompatible types
+              "shape" => Rectangle::new(),
+              }
+              }
+              * should use Box or use enum
     * lifetime
         * Rust tries to assign each reference type in your program a lifetime that meets the con‐
           straints imposed by how it is used.
@@ -330,6 +530,80 @@
         * Any type that implements the
             FromStr trait has a from_str method that tries to parse a value of that type from a
             string
+        * std::str::FromStr
+            * Rust provides standard traits for both parsing values from strings and producing tex‐
+              tual representations of values.
+        * Clone
+            * The clone method should construct an independent copy of self and return it.
+            * Cloning a value usually entails allocating copies of anything it owns, as well, so a
+              clone can be expensive, in both time and memory.
+            * #[derive(Clone)]
+            * Some types don’t make sense to copy, like std::sync::Mutex; those
+              don’t implement Clone.
+            * ToOwned
+                * But what if you want to
+                  clone a &str or a &[i32]? What you probably want is a String or a Vec<i32>, but
+                  Clone’s definition doesn’t permit that: by definition, cloning a &T must always return a
+                  value of type T, and str and [u8] are unsized; they aren’t even types that a function
+                  could return.
+                * Unlike clone, which must return exactly Self, to_owned can return anything you
+                  could borrow a &Self from: the Owned type must implement Borrow<Self>.
+        * Cow
+            * The nub of the problem is that sometimes the return value of get_name should be an
+              owned String, sometimes it should be a &'static str, and we can’t know which one
+              it will be until we run the program. This dynamic character is the hint to consider
+              using std::borrow::Cow, the clone-on-write type that can hold either owned or bor‐
+              rowed data.
+                fn get_name() -> String {
+                std::env::var("USER") // Windows uses "USERNAME"
+                .unwrap_or("whoever you are".to_string())
+                }
+                println!("Greetings, {}!", get_name());
+                Since Cow is frequently used for strings, the standard library has some special support
+                for Cow<'a, str>.
+                fn get_name() -> Cow<'static, str> {
+                std::env::var("USER")
+                .map(|v| v.into())
+                .unwrap_or("whoever you are".into())
+                }
+            * Borrowed holds a ref‐
+              erence &'a T, and Owned holds the owning version of &T: String for &str, Vec<i32>
+              for &[i32], and so on.
+            * clone on write
+            * A Cow<B> either borrows a shared reference to a B or owns a value from which we
+              could borrow such a reference.
+            * Since Cow implements Deref, you can call methods on
+              it as if it were a shared reference to a B: if it’s Owned, it borrows a shared reference to
+              the owned value; and if it’s Borrowed, it just hands out the reference it’s holding.
+            * You can also get a mutable reference to a Cow’s value by calling its to_mut method,
+              which returns a &mut B. If the Cow happens to be Cow::Borrowed, to_mut simply calls
+              the reference’s to_owned method to get its own copy of the referent, changes the Cow
+              into a Cow::Owned, and borrows a mutable reference to the newly owned value. This
+              is the “clone on write” behavior the type’s name refers to.
+            * Similarly, Cow has an into_owned method that promotes the reference to an owned
+              value, if necessary, and then returns it, moving ownership to the caller and consum‐
+              ing the Cow in the process.
+            * One common use for Cow is to return either a statically allocated string constant or a
+              computed string.
+                fn describe(error: &Error) -> Cow<'static, str> {
+                match *error {
+                Error::OutOfMemory => "out of memory".into(),
+                Error::StackOverflow => "stack overflow".into(),
+                Error::MachineOnFire => "machine on fire".into(),
+                Error::Unfathomable => "machine bewildered".into(),
+                Error::FileNotFound(ref path) => {
+                format!("file not found: {}", path.display()).into()
+                }
+                }
+                }
+        * Copy
+            * Any type that implements the Drop trait cannot be Copy.
+            * Rust presumes that if a type
+              needs special cleanup code, it must also require special copying code and thus can’t be
+              Copy.
+            * #[derive(Copy)]
+            * Think carefully before making a type Copy. Although doing so makes the type easier
+              to use, it places heavy restrictions on its implementation.
         * Send, Sync
             * Send type can be moved to different thread, Sync type's reference can be moved to different thread.
             * A type being Send means it can be moved across thread boundaries. This means there is always exactly one owner even as the thread changes.
@@ -343,7 +617,66 @@
                 * For example, Rc is not Send, because it uses non-atomic operations to manage its reference count, which would lead to a data race if an Rc were moved to another thread.
                 * Similarly, RefCell is not Sync, because it allows unsynchronized mutation of its state.
             * You can read the hashmap, string and pretty much any other ‘simple’ structure concurrently from as many threads as you’d like. At the same time, if you have an exclusive reference, you can modify such structures from whatever thread because there’s only one thread accessing it.
-        * Deref
+        * Deref, DerefMut
+            * You can specify how dereferencing operators like * and . behave on your types by
+              implementing the std::ops::Deref and std::ops::DerefMut traits.
+            * For example, if you have a Box<Complex> value b, then *b refers to
+              the Complex value that b points to, and b.re refers to its real component.
+            * If the con‐
+              text assigns or borrows a mutable reference to the referent, Rust uses the DerefMut
+              (“dereference mutably”) trait; otherwise, read-only access is enough, and it uses
+              Deref.
+        * Default
+            * The default method simply returns a fresh value of type Self.
+        * AsRef and AsMut
+            * When a type implements AsRef<T>, that means you can borrow a &T from it effi‐
+              ciently.
+            * AsMut is the analogue for mutable references.
+            * for example, Vec<T> implements AsRef<[T]>, and String implements
+              AsRef<str>.
+            * You might assume that if a type implements AsRef<T>, it should also implement
+              AsMut<T>.
+              * For example, we’ve
+                mentioned that String implements AsRef<[u8]>; this makes sense, as each String
+                certainly has a buffer of bytes that can be useful to access as binary data. However,
+                String further guarantees that those bytes are a well-formed UTF-8 encoding of Uni‐
+                code text; if String implemented AsMut<[u8]>, that would let callers change the
+                String’s bytes to anything they wanted, and you could no longer trust a String to be
+                well-formed UTF-8. It only makes sense for a type to implement AsMut<T> if modify‐
+                ing the given T cannot violate the type’s invariants.
+        * From and Into
+            * the effect is much like that of overloading a
+              function in C++.
+            * fn ping<A>(address: A) -> std::io::Result<bool>
+              where A: Into<Ipv4Addr>
+              println!("{:?}", ping(Ipv4Addr::new(23, 21, 68, 141))); // pass an Ipv4Addr
+              println!("{:?}", ping([66, 146, 219, 98])); // pass a [u8; 4]
+            * The ? operator uses From and Into to help clean up code in functions that could fail
+              in multiple ways by automatically converting from specific error types to general ones
+              when needed.
+              * https://www.reddit.com/r/rust/comments/iuespp/question_mark_operator_implicit_conversion_why/
+            * From and Into are infallible traits—their API requires that conversions will not fail.
+        * TryFrom and TryInto
+            * Where From and Into relate types with simple conversions, TryFrom and TryInto
+              extend the simplicity of From and Into conversions with the expressive error han‐
+              dling afforded by Result.
+        * PartialEq
+        * Rust can automatically implement them for you, with mechanical accuracy. Just add a
+          #[derive] attribute to the struct:
+          #[derive(Copy, Clone, Debug, PartialEq)]
+        * Sized
+            * A sized type is one whose values all have the same size in memory.
+                * every u64 takes eight bytes, every (f32, f32, f32) tuple twelve
+            * All sized types implement the std::marker::Sized trait, which has no methods or
+              associated types.
+            * Rust can’t store unsized values in variables or pass them as arguments. You can only
+              deal with them through pointers like &str or Box<dyn Write>, which themselves are
+              sized.
+            * 13-1, a pointer to an unsized value is always a fat pointer,
+              two words wide: a pointer to a slice also carries the slice’s length, and a trait object
+              also carries a pointer to a vtable of method implementations.
+            * A struct
+              type’s last field (but only its last) may be unsized, and such a struct is itself unsized.
     * macros (derev)
     * static dispatch
         * Static dispatch is not something Go or Java have.
@@ -468,6 +801,60 @@
           Undefined Behavior:
           When the worker thread accesses the shared reference after the original block has ended, it leads to undefined behavior. The reference r is no longer valid, as it points to memory that has been deallocated.
 1. closures
+    * closures that don’t capture anything from their environment are identical to
+      function pointers,
+    * In this case, when Rust creates the closure, it automatically borrows a reference to
+      stat. It stands to reason: the closure refers to stat, so it must have a reference to it.
+    * The closure is subject to the rules about borrowing and lifetimes
+        * In particular, since the closure contains a reference to
+          stat, Rust won’t let it outlive stat. Since the closure is only used during sorting, this
+          example is fine.
+    * tell Rust to move cities and stat into the
+      closures that use them instead of borrowing references to them.
+      * The move keyword tells Rust that a closure doesn’t borrow the variables it uses:
+        it steals them.
+      * The first closure, key_fn, takes ownership of stat. Then the second closure takes
+        ownership of both cities and key_fn.
+    * Rust thus offers two ways for closures to get data from enclosing scopes: moves and
+      borrowing.
+      * Just as everywhere else in the language, if a closure would move a value of a copy‐
+        able type, like i32, it copies the value instead.
+      * Values of noncopyable types, like Vec<City>, really are moved: the preceding
+        code transfers cities to the new thread, by way of the move closure.
+        * Rust would
+          not let us access cities by name after creating the closure.
+    * After all this, it may come as a surprise that closures do not have the same type as
+      functions:
+      fn count_selected_cities(cities: &Vec<City>,
+      test_fn: fn(&City) -> bool) -> usize
+      vs
+      fn count_selected_cities<F>(cities: &Vec<City>, test_fn: F) -> usize
+      where F: Fn(&City) -> bool
+      This trait is automatically implemented by all
+      functions and most closures that take a single &City as an argument and return a
+      Boolean value:
+      * In fact, every closure you write has its own type, because a closure may contain data:
+        values either borrowed or stolen from enclosing scopes.
+        * So every closure has an ad hoc type created by
+          the compiler, large enough to hold that data.
+        * No two closures have exactly the same
+          type. But every closure implements an Fn trait;
+    * FnOnce,
+        * Closures that drop values, like f, are
+          not allowed to have Fn. They are, quite literally, no Fn at all. They implement a less
+          powerful trait, FnOnce, the trait of closures that can be called once.
+        let my_str = "hello".to_string();
+        let f = || drop(my_str);
+        f(); // ok
+        f(); // error: use of moved value
+
+        fn call_twice<F>(closure: F) where F: Fn() {
+        closure();
+        closure();
+        }
+        let my_str = "hello".to_string();
+        let f = || drop(my_str);
+        call_twice(f);
     || {body} when no param
     |a| {body} with param
     * Note that, unlike functions declared with fn, we don’t need to declare the
@@ -568,6 +955,37 @@
               bine those techniques with Rc pointers, you can create a cycle and leak memory.
             * You can sometimes avoid creating cycles of Rc pointers by using weak pointers,
               std::rc::Weak, for some of the links instead.
+            * What we need is a little bit of mutable
+              data (a File) inside an otherwise immutable value (the SpiderRobot struct).
+            * Rust offers several flavors of it; in this section, we’ll discuss
+              the two most straightforward types: Cell<T> and RefCell<T>, both in the std::cell
+              module.
+              * A Cell<T> is a struct that contains a single private value of type T. The only special
+                thing about a Cell is that you can get and set the field even if you don’t have mut
+                access to the Cell itself:
+                fn set(&self, value: T) // note: not `&mut self`
+                this one unusual detail is the whole point of Cells.
+              * Unlike Cell, RefCell supports borrowing refer‐
+                ences to its T value:
+                ref_cell.borrow()
+                Returns a Ref<T>, which is essentially just a shared reference to the value stored
+                in ref_cell.
+                This method panics if the value is already mutably borrowed; see details to fol‐
+                low.
+                ref_cell.borrow_mut()
+                Returns a RefMut<T>, essentially a mutable reference to the value in ref_cell.
+                This method panics if the value is already borrowed; see details to follow.
+                ref_cell.try_borrow(), ref_cell.try_borrow_mut()
+                Work just like borrow() and borrow_mut(), but return a Result. Instead of pan‐
+                icking if the value is already mutably borrowed, they return an Err value.
+              * The only difference is that normally,
+                when you borrow a reference to a variable, Rust checks at compile time to ensure that
+                you’re using the reference safely. If the checks fail, you get a compiler error. RefCell
+                enforces the same rule using run-time checks.
+              * The other drawback is less obvious and more serious: cells—and any types
+                that contain them—are not thread-safe.
+                * Rust therefore will not allow multiple threads
+                  to access them at once.
     * Box<T>
         * A Box<T> is a pointer to a
           value of type T stored on the heap. Calling Box::new(v) allocates some heap space,
@@ -704,8 +1122,86 @@
         * This information is "embedded" in pointers to unsized types, making these pointers "fat".
 
 1. pattern matching
+    * enums
+        * In memory, enums with data are stored as a small integer tag, plus enough memory
+          to hold all the fields of the largest variant.
+        * The tag field is for Rust’s internal use. It
+          tells which constructor created the value and therefore which fields it has.
+        * Enums are also useful for quickly implementing tree-like data structures.
+    * Enums can have methods, just like structs:
     * Rust prohibits match expressions that do not cover all possible values:
+    * borrow of references
+        match account {
+        Account { name, language, .. } => {
+        ui.greet(&name, &language);
+        ui.show_settings(&account); // error: borrow of moved value: `account`
+        }
+        }
+        Here, the fields account.name and account.language are moved into local variables
+        name and language. The rest of account is dropped. That’s why we can’t borrow a ref‐
+        erence to it afterward.
+        We need a kind of pattern that borrows matched values instead of moving them.
+        match account {
+        Account { ref name, ref language, .. } => { // You can use ref mut to borrow mut references:
+        ui.greet(name, language);
+        ui.show_settings(&account); // ok
+        }
+        }
+        In a
+        pattern, & matches a reference.
+        match sphere.center() { // sphere.center() returns ref
+        &Point3d { x, y, z } => ...
+        }
+        When we match &Point3d { x, y, z }, the
+        variables x, y, and z receive copies of the coordinates, leaving the original Point3d
+        value intact. It works because those fields are copyable. If we try the same thing on a
+        struct with noncopyable fields, we’ll get an error:
+        match friend.borrow_car() {
+        Some(&Car { engine, .. }) => // error: can't move out of borrow
+        ...
+        None => {}
+        }
+        You can
+        use a ref pattern to borrow a reference to a part. You just don’t own it:
+        Some(&Car { ref engine, .. }) => // ok, engine is a reference
+
+        * But Rust also provides match guards, extra conditions that must be true in order for a
+        match arm to apply, written as if CONDITION,
+        match point_to_hex(click) {
+        None => Err("That's not a game space."),
+        Some(hex) if hex == current_hex =>
+        Err("You are already there! You must click somewhere else"),
+        Some(hex) => Ok(hex)
+        }
+        * Matching Multiple Possibilities
+            * The vertical bar (|) can be used to combine several patterns in a single match arm:
+        * Binding with @ Patterns
+            * Finally, x @ pattern matches exactly like the given pattern, but on success, instead
+              of creating variables for parts of the matched value, it creates a single variable x and
+              moves or copies the whole value into it.
+              rect @ Shape::Rect(..) => {
+              optimized_paint(&rect)
+              }
 1. String vs str
+    * Several standard library features share this little language for formatting strings:
+        • The format! macro uses it to build Strings.
+        • The println! and print! macros write formatted text to the standard output
+        stream.
+        • The writeln! and write! macros write it to a designated output stream.
+        • The panic! macro uses it to build an (ideally informative) expression of terminal
+        dismay.
+    * The Rust String and str types represent text using the UTF-8 encoding form. UTF-8
+      encodes a character as a sequence of one to four bytes
+    * There are two restrictions on well-formed UTF-8 sequences.
+        * First, only the shortest
+        encoding for any given code point is considered well-formed; you can’t spend four
+        bytes encoding a code point that would fit in three.
+        * Second, well-formed UTF-8 must
+          not encode numbers from 0xd800 through 0xdfff or beyond 0x10ffff: those are
+          either reserved for noncharacter purposes or outside Unicode’s range entirely.
+    * Rust’s String and str types are guaranteed to hold only well-formed UTF-8.
+    * A String is implemented as a wrapper around a Vec<u8> that ensures the vector’s
+      contents are always well-formed UTF-8.
     * String literals are enclosed in double quotes.
         * let speech = "\"Ouch!\" said the well.\n";
     * Rust strings are sequences of Unicode characters, but they are not stored in memory
@@ -828,6 +1324,66 @@
     * The #[derive(Debug)] attribute tells the compiler to generate some extra code that
       allows us to format the Arguments struct with {:?} in println!.
 1. collections
+    * Vec<T>, VecDeque<T>, LinkedList<T>, BinaryHeap<T>, HashMap<K, V>
+    * BTreeMap<K, V>, HashSet<T>, BTreeSet<T>
+        * BTreeMap - Sorted key-value table
+    * Vec
+        * a vector has three fields: the length, the capacity, and a
+          pointer to a heap allocation where the elements are stored.
+        * All of a vector’s elements are stored in a contiguous, heap-allocated chunk of mem‐
+          ory. The capacity of a vector is the maximum number of elements that would fit in
+          this chunk. Vec normally manages the capacity for you, automatically allocating a
+          larger buffer and moving the elements into it when more space is needed.
+        * java: ConcurrentModificationException
+            fn main() {
+            let mut my_vec = vec![1, 3, 5, 7, 9];
+            for (index, &val) in my_vec.iter().enumerate() { // borrows a shared (non-mut) reference to the vector
+            if val > 4 {
+            my_vec.remove(index); // error: can't borrow `my_vec` as mutable
+            }
+            }
+            println!("{:?}", my_vec);
+            }
+            The easiest fix here is to write:
+            my_vec.retain(|&val| val <= 4);
+    * HashMap
+        * All keys, values, and cached hash codes are stored in a single heap-allocated table.
+          Adding entries eventually forces the HashMap to allocate a larger table and move all
+          the data into it.
+        * let record = student_map.entry(name.to_string()).or_insert_with(Student::new);
+        * map.entry(key).or_insert(value)
+            * returns a mut reference to the new or existing value
+            let mut vote_counts: HashMap<String, usize> = HashMap::new();
+            for name in ballots {
+            let count = vote_counts.entry(name).or_insert(0);
+            *count += 1;
+            }
+        * map.entry(key).and_modify(closure)
+            let mut word_frequency: HashMap<&str, u32> = HashMap::new();
+            for c in text.split_whitespace() {
+            word_frequency.entry(c)
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
+            }
+        * Map Iteration
+            • Iterating by value (for (k, v) in map) produces (K, V) pairs. This consumes
+            the map.
+            • Iterating over a shared reference (for (k, v) in &map) produces (&K, &V)
+            pairs.
+            • Iterating over a mut reference (for (k, v) in &mut map) produces (&K, &mut
+            V) pairs. (Again, there’s no way to get mut access to keys stored in a map, because
+            the entries are organized by their keys.)
+    * BTree
+        * The Rust standard library uses B-trees rather than balanced binary trees because B-
+          trees are faster on modern hardware. A binary tree may use fewer comparisons per
+
+          search than a B-tree, but searching a B-tree has better locality—that is, the memory
+          accesses are grouped together rather than scattered across the whole heap. This
+          makes CPU cache misses rarer. It’s a significant speed boost.
+    * Rust uses moves to avoid deep-copying
+      values. That’s why the method Vec<T>::push(item) takes its argument by value, not
+      by reference.
+      * The value is moved into the vector.
     * A Vec<T> consists of three values: a pointer to the heap-allocated buffer for the ele‐
       ments, which is created and owned by the Vec<T>; the number of elements that buffer
       has the capacity to store; and the number it actually contains now (in other words, its
@@ -860,6 +1416,14 @@
           key and value: artist has changed from a String to a &String, and works from a
           Vec<String> to a &Vec<String>.
 1. syntax
+    * The for loop uses IntoIterator::into_iter to convert its operand &v into an
+      iterator and then calls Iterator::next repeatedly.
+        * trait: Iterator IntoIterator
+        * The inspect adapter is handy for debugging pipelines of iterator adapters, but it isn’t
+          used much in production code.
+        * enumerate adapter attaches a running index to the sequence, tak‐
+          ing an iterator that produces items A, B, C, ... and returning an iterator that pro‐
+          duces pairs (0, A), (1, B), (2, C), ....
     * shadowing of let
     * if let
         if let pattern = expr {
@@ -922,3 +1486,52 @@
       print_tides(tides);
       Ok(())
       }
+    * This means patterns can be used to...
+      // ...unpack a struct into three new local variables
+      let Track { album, track_number, title, .. } = song;
+      // ...iterate over keys and values of a HashMap
+      for (id, document) in &cache_map {
+      println!("Document #{}: {}", id, document.title);
+      }
+1. attributes
+    * You
+      can disable the warning by adding an #[allow] attribute on the type:
+      #[allow(non_camel_case_types)]
+    * Conditional compilation is another feature that’s written using an attribute, namely,
+      #[cfg]:
+      #[cfg(target_os = "android")]
+    * #[inline]
+1. testing
+    * Tests are ordinary functions marked with the #[test]
+      attribute: #[test]
+    * Tests commonly use the assert! and assert_eq! macros from the Rust standard
+      library. assert!(expr) succeeds if expr is true. Otherwise, it panics, which causes the
+      test to fail. assert_eq!(v1, v2) is just like assert!(v1 == v2) except that if the
+      assertion fails, the error message shows both values.
+    * To test error cases, add the #[should_panic] attribute to your test:
+        #[test]
+        #[allow(unconditional_panic, unused_must_use)]
+        #[should_panic(expected="divide by zero")]
+    * Functions marked with #[test] are compiled conditionally.
+        * A plain cargo build or
+          cargo build --release skips the testing code.
+        * But when you run cargo test,
+          Cargo builds your program twice: once in the ordinary way and once with your tests
+          and the test harness enabled.
+    * So the convention, when your tests get substantial enough to require support code, is
+      to put them in a tests module and declare the whole module to be testing-only using
+      the #[cfg] attribute:
+      #[cfg(test)] // include this module only when testing
+      mod tests {
+
+      }
+    * To disable this, either run a single
+      test, cargo test testname, or run cargo test -- --test-threads 1. (The first --
+      ensures that cargo test passes the --test-threads option through to the test exe‐
+      cutable.)
+    * Integration tests are .rs files that live in a tests directory alongside your project’s src
+      directory.
+      * When you run cargo test, Cargo compiles each integration test as a sepa‐
+        rate, standalone crate, linked with your library and the Rust test harness.
+      * Integration tests are valuable in part because they see your crate from the outside, just
+        as a user would. They test the crate’s public API.
