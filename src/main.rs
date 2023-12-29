@@ -6,6 +6,7 @@ use domain::id::{IdRepository, IdService};
 use crate::infrastructure::id_config::{DeterministicRepository, UuidRepository};
 use crate::gateway::customer::{create_customer, get_customer};
 use crate::infrastructure::app_config::AppConfig;
+use std::sync::Arc;
 
 mod b;
 mod domain;
@@ -35,7 +36,7 @@ async fn rocket() -> _ {
     let a = UuidRepository;
     let b = a.get();
     let c = a.get();
-    let cc = IdService::new(a);
+    let cc = Arc::new(IdService::new(a));
     let d = cc.generate().await;
     println!("{} {} {}", b, c, d);
     println!("-----------------");

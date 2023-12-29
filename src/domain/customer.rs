@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::domain::id::IdService;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
@@ -61,13 +62,13 @@ impl NewCustomerCommand {
 }
 
 pub struct CustomerService {
-    id_service: IdService,
+    id_service: Arc<IdService>,
     repository: Box<dyn CustomerRepository + Send + Sync>,
 }
 
 impl CustomerService {
 
-    pub(crate) fn new<T: CustomerRepository + Send + Sync + 'static>(id_service: IdService, repository: T) -> CustomerService {
+    pub(crate) fn new<T: CustomerRepository + Send + Sync + 'static>(id_service: Arc<IdService>, repository: T) -> CustomerService {
         CustomerService {
             id_service: id_service,
             repository: Box::new(repository)

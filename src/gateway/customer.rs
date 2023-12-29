@@ -35,6 +35,15 @@ impl From<Customer> for CustomerApiOutput {
     }
 }
 
+impl From<CustomerError> for Custom<&'static str> {
+    fn from(value: CustomerError) -> Self {
+        match value {
+            CustomerError::CustomerAlreadyExist =>
+                Custom(Status::BadRequest, "customer already exists"),
+        }
+    }
+}
+
 #[post("/customers", data = "<request>")]
 pub async fn create_customer(
     request: Json<NewCustomerApiInput>,
@@ -46,7 +55,7 @@ pub async fn create_customer(
             let output: CustomerApiOutput = customer.into();
             Created::new(output.id.to_string()).body(Json(output))
         })
-        .map_err(map_customer_error)
+        .map(|result| Ok(result))?
 }
 
 #[get("/customers/<customer_id>")]
@@ -57,11 +66,4 @@ pub async fn get_customer(
     let customer_id = &customer_id.into();
     service.get_by_id(customer_id).await
         .map(|r| Json(r.into()))
-}
-
-fn map_customer_error(error: CustomerError) -> Custom<&'static str> {
-    match error {
-        CustomerError::CustomerAlreadyExist =>
-            Custom(Status::BadRequest, "customer already exists"),
-    }
 }
