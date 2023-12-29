@@ -338,6 +338,11 @@
     * You need to ask yourself "Does the struct own this data?". If so, you go with 'static (unborrowed) fields and if not, you go with references. If ownership is shared, you go with Rc/Weak/Arc depending on the kind of ownership. And if it's possibly shared, you go with Cow.
     * I'd just default to String for struct fields (unless it's a constant string literal so that you can use &'static str. &str is easy for read-only function parameters, but it's a pain for structs, so I generally only use it if I really need it.
 1. error: unrecoverable: panic, recoverable: result
+    * In Rust, panic is safe and per
+      thread. The boundaries between threads serve as a firewall for panic; panic doesn’t
+      automatically spread from one thread to the threads that depend on it. Instead, a
+      panic in one thread is reported as an error Result in other threads. The program as a
+      whole can easily recover.
     * // Errors should implement the std::error::Error trait,
       // but the default definitions for the Error methods are fine.
       impl std::error::Error for JsonError { }
@@ -1190,6 +1195,15 @@
         • The writeln! and write! macros write it to a designated output stream.
         • The panic! macro uses it to build an (ideally informative) expression of terminal
         dismay.
+        * Formatting macros always borrow shared references to their arguments; they never
+          take ownership of them or mutate them.
+          The template’s {...} forms are called format parameters and have the form
+          {which:how}. Both parts are optional; {} is frequently used.
+          The which value selects which argument following the template should take the
+          parameter’s place. You can select arguments by index or by name. Parameters with no
+          which value are simply paired with arguments from left to right.
+          The how value says how the argument should be formatted: how much padding, to
+          which precision, in which numeric radix, and so on.
     * The Rust String and str types represent text using the UTF-8 encoding form. UTF-8
       encodes a character as a sequence of one to four bytes
     * There are two restrictions on well-formed UTF-8 sequences.
