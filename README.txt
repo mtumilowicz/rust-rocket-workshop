@@ -1569,37 +1569,37 @@
       #[cfg]:
       #[cfg(target_os = "android")]
     * #[inline]
-1. testing
-    * Tests are ordinary functions marked with the #[test]
-      attribute: #[test]
-    * Tests commonly use the assert! and assert_eq! macros from the Rust standard
-      library. assert!(expr) succeeds if expr is true. Otherwise, it panics, which causes the
-      test to fail. assert_eq!(v1, v2) is just like assert!(v1 == v2) except that if the
-      assertion fails, the error message shows both values.
-    * To test error cases, add the #[should_panic] attribute to your test:
-        #[test]
-        #[allow(unconditional_panic, unused_must_use)]
-        #[should_panic(expected="divide by zero")]
-    * Functions marked with #[test] are compiled conditionally.
-        * A plain cargo build or
-          cargo build --release skips the testing code.
-        * But when you run cargo test,
-          Cargo builds your program twice: once in the ordinary way and once with your tests
-          and the test harness enabled.
-    * So the convention, when your tests get substantial enough to require support code, is
-      to put them in a tests module and declare the whole module to be testing-only using
-      the #[cfg] attribute:
-      #[cfg(test)] // include this module only when testing
-      mod tests {
+## testing
+* Tests are ordinary functions marked with the #[test]
+  attribute: #[test]
+* Tests commonly use the assert! and assert_eq! macros from the Rust standard
+  library. assert!(expr) succeeds if expr is true. Otherwise, it panics, which causes the
+  test to fail. assert_eq!(v1, v2) is just like assert!(v1 == v2) except that if the
+  assertion fails, the error message shows both values.
+* To test error cases, add the #[should_panic] attribute to your test:
+    #[test]
+    #[allow(unconditional_panic, unused_must_use)]
+    #[should_panic(expected="divide by zero")]
+* Functions marked with #[test] are compiled conditionally.
+    * A plain cargo build or
+      cargo build --release skips the testing code.
+    * But when you run cargo test,
+      Cargo builds your program twice: once in the ordinary way and once with your tests
+      and the test harness enabled.
+* So the convention, when your tests get substantial enough to require support code, is
+  to put them in a tests module and declare the whole module to be testing-only using
+  the #[cfg] attribute:
+  #[cfg(test)] // include this module only when testing
+  mod tests {
 
-      }
-    * To disable this, either run a single
-      test, cargo test testname, or run cargo test -- --test-threads 1. (The first --
-      ensures that cargo test passes the --test-threads option through to the test exe‐
-      cutable.)
-    * Integration tests are .rs files that live in a tests directory alongside your project’s src
-      directory.
-      * When you run cargo test, Cargo compiles each integration test as a sepa‐
-        rate, standalone crate, linked with your library and the Rust test harness.
-      * Integration tests are valuable in part because they see your crate from the outside, just
-        as a user would. They test the crate’s public API.
+  }
+* To disable this, either run a single
+  test, cargo test testname, or run cargo test -- --test-threads 1. (The first --
+  ensures that cargo test passes the --test-threads option through to the test exe‐
+  cutable.)
+* Integration tests are .rs files that live in a tests directory alongside your project’s src
+  directory.
+  * When you run cargo test, Cargo compiles each integration test as a sepa‐
+    rate, standalone crate, linked with your library and the Rust test harness.
+  * Integration tests are valuable in part because they see your crate from the outside, just
+    as a user would. They test the crate’s public API.
