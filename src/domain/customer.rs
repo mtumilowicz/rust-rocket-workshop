@@ -21,7 +21,7 @@ impl From<String> for CustomerId {
 }
 
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Customer {
     id: CustomerId,
     name: String,
@@ -33,7 +33,7 @@ impl Customer {
         &self.id
     }
 
-    pub fn name(&self) -> &String {
+    pub fn name(&self) -> &str {
         &self.name
     }
 
@@ -94,4 +94,40 @@ pub trait CustomerRepository {
     fn create(&self, customer: Customer) -> Result<Customer, CustomerError>;
     fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer>;
 
+}
+
+#[cfg(test)]
+mod tests {
+    use rocket::async_test;
+    use crate::infrastructure::customer_config::CustomerInMemoryRepository;
+    use crate::infrastructure::id_config::DeterministicRepository;
+    use super::*;
+
+    #[async_test]
+    async fn test_create_and_get_customer() {
+        let id_service = Arc::new(IdService::new(DeterministicRepository::new()));
+        let customer_repository = CustomerInMemoryRepository::new();
+        let customer_service = CustomerService::new(id_service.clone(), customer_repository);
+
+        let new_customer_command = NewCustomerCommand::new("John Doe".to_string(), false);
+
+        let created_customer = customer_service.create(new_customer_command).await.unwrap();
+
+        let retrieved_customer = customer_service.get_by_id(&created_customer.id()).await.unwrap();
+
+        assert_eq!(retrieved_customer, created_customer);
+    }
+
+    #[async_test]
+    async fn test_get_nonexistent_customer() {
+        let id_service = Arc::new(IdService::new(DeterministicRepository::new()));
+        let customer_repository = CustomerInMemoryRepository::new();
+        let customer_service = CustomerService::new(id_service.clone(), customer_repository);
+
+        let customer_id = CustomerId("nonexistent_id".to_string());
+
+        let result = customer_service.get_by_id(&customer_id).await;
+
+        assert!(result.is_none());
+    }
 }

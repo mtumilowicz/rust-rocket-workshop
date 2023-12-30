@@ -6,7 +6,7 @@ use crate::infrastructure::id_config::{UuidRepository};
 use crate::gateway::customer::{create_customer, get_customer};
 use std::sync::Arc;
 
-pub fn server() -> Rocket<Build> {
+pub async fn server() -> Rocket<Build> {
     let id_service = Arc::new(IdService::new(UuidRepository));
     let customer_service = CustomerService::new(id_service, CustomerInMemoryRepository::new());
     rocket::build()
