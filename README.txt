@@ -30,6 +30,10 @@
           against a kind of denial-of-service attack called HashDoS, where attackers deliber‐
           ately use hash collisions to trigger worst-case performance in a server.
 1. ownership and borrowing
+    * Rust’s borrow system can’t protect
+      you from deadlock.
+      * The best protection is to keep critical sections small: get in, do
+        your work, and get out.
     * Paring these principles down to the simplest possible examples:
       let mut x = 10;
       let r1 = &x;
@@ -610,6 +614,24 @@
             * Think carefully before making a type Copy. Although doing so makes the type easier
               to use, it places heavy restrictions on its implementation.
         * Send, Sync
+            * This is mostly true, but Rust’s full thread safety story hinges on two built-in
+              traits, std::marker::Send and std::marker::Sync.
+            * Types that implement Send are safe to pass by value to another thread. They can
+              be moved across threads.
+            * Types that implement Sync are safe to pass by non-mut reference to another
+              thread. They can be shared across threads.
+            * A struct or enum is Send if its fields are Send, and Sync if its fields are Sync.
+            * Some types are Send, but not Sync. This is generally on purpose, as in the case of
+              mpsc::Receiver, where it guarantees that the receiving end of an mpsc channel is
+              used by only one thread at a time.
+            * The few types that are neither Send nor Sync are mostly those that use mutability in a
+              way that isn’t thread-safe. For example, consider std::rc::Rc<T>, the type of
+              reference-counting smart pointers.
+              * What would happen if Rc<String> were Sync, allowing threads to share a single Rc
+                via shared references? If both threads happen to try to clone the Rc at the same time,
+                as shown in Figure 19-10, we have a data race as both threads increment the shared
+
+                reference count.
             * Send type can be moved to different thread, Sync type's reference can be moved to different thread.
             * A type being Send means it can be moved across thread boundaries. This means there is always exactly one owner even as the thread changes.
             * A type being Sync means it can be shared between threads. This means a value can be borrowed from multiple threads.
@@ -1314,7 +1336,39 @@
           string without being escaped, including double quotes; in fact, no escape sequences
           like \" are recognized.
 1. async
+    * Generally, asynchronous Rust code looks very much like ordinary multithreaded
+      code, except that operations that might block, like I/O or acquiring mutexes, need to
+      be handled a bit differently.
+    * Rust’s approach to supporting asynchronous operations is to introduce a trait,
+      std::future::Future:
+      trait Future {
+      type Output;
+      // For now, read `Pin<&mut Self>` as `&mut Self`.
+      fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>;
+      }
+      enum Poll<T> {
+      Ready(T),
+      Pending,
+      }
+      A future’s poll
+      method never waits for the operation to finish: it always returns immediately.
+      If and when the future is worth polling again, it
+      promises to let us know by invoking a waker, a callback function supplied in the
+      Context.
+      We call this the “piñata model” of asynchronous programming: the only
+      thing you can do with a future is whack it with a poll until a value falls out.
+    * One of the rules of the Future trait is that, once a future has returned Poll::Ready, it
+      may assume it will never be polled again. Some futures just return Poll::Pending
+      forever if they are overpolled; others may panic or hang. (They must not, however,
+      violate memory or thread safety, or otherwise cause undefined behavior.)
+    * • After each call that returns a future, the code says .await. Although this looks
+      like a reference to a struct field named await, it is actually special syntax built
+      into the language for waiting until a future is ready.
+    * Unlike an ordinary function, when you call an asynchronous function, it returns
+      immediately, before the body begins execution at all. Obviously, the call’s final return
+      value hasn’t been computed yet; what you get is a future of its final value.
 1. mutability
+    * In Rust, &mut means exclusive access. Plain & means shared access.
     * Iterating over a mut reference provides a mut reference to each element:
         for rs in &mut strings { // the type of rs is &mut String
         rs.push('\n'); // add a newline to each string
