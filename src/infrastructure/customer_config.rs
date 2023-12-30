@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use crate::domain::customer::{Customer, CustomerId, CustomerRepository, CustomerError};
 
 pub struct CustomerInMemoryRepository {

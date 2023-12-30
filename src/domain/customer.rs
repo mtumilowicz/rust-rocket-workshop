@@ -68,7 +68,7 @@ pub struct CustomerService {
 
 impl CustomerService {
 
-    pub(crate) fn new<T: CustomerRepository + Send + Sync + 'static>(id_service: Arc<IdService>, repository: T) -> CustomerService {
+    pub fn new<T: CustomerRepository + Send + Sync + 'static>(id_service: Arc<IdService>, repository: T) -> CustomerService {
         CustomerService {
             id_service: id_service,
             repository: Box::new(repository)

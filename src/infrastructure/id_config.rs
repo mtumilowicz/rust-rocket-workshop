@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicI32, Ordering};
 use uuid::Uuid;
-use crate::domain::id::{IdRepository, IdService};
+use crate::domain::id::IdRepository;
 
 pub struct UuidRepository;
 
