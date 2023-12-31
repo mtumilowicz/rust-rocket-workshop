@@ -1484,84 +1484,6 @@
           shared reference to a HashMap is defined to produce shared references to each entry’s
           key and value: artist has changed from a String to a &String, and works from a
           Vec<String> to a &Vec<String>.
-1. syntax
-    * The for loop uses IntoIterator::into_iter to convert its operand &v into an
-      iterator and then calls Iterator::next repeatedly.
-        * trait: Iterator IntoIterator
-        * The inspect adapter is handy for debugging pipelines of iterator adapters, but it isn’t
-          used much in production code.
-        * enumerate adapter attaches a running index to the sequence, tak‐
-          ing an iterator that produces items A, B, C, ... and returning an iterator that pro‐
-          duces pairs (0, A), (1, B), (2, C), ....
-    * shadowing of let
-    * if let
-        if let pattern = expr {
-        block1
-        } else {
-        block2
-        }
-        The given expr either matches the pattern, in which case block1 runs, or doesn’t
-        match, and block2 runs.
-        * example
-            if let Some(cookie) = request.session_cookie {
-            return restore_session(cookie);
-            }
-        * An if let expression is shorthand for a match with just one pattern:
-          match expr {
-          pattern => { block1 }
-          _ => { block2 }
-          }
-    * return without a value is shorthand for return ():
-        * The body of a function
-          works like a block expression: if the last expression isn’t followed by a semicolon, its
-          value is the function’s return value.
-        * the ? operator to
-          check for errors after calling a function that can fail:
-          let output = File::create(filename)?;
-          We explained that this is shorthand for a match expression:
-          let output = match File::create(filename) {
-          Ok(f) => f,
-          Err(err) => return Err(err)
-          };
-    * Expressions that don’t finish
-      normally are assigned the special type !, and they’re exempt from the rules about
-      types having to match.
-      fn exit(code: i32) -> !
-      The ! means that exit() never returns. It’s a divergent function.
-      fn serve_forever(socket: ServerSocket, handler: ServerHandler) -> ! {
-        socket.listen();
-        loop {
-        let s = socket.accept();
-        handler.handle(s);
-        }
-      }
-    * dot
-        * The unary * operator is used to access the value pointed to by a reference. As we’ve
-          seen, Rust automatically follows references when you use the . operator to access a
-          field or method, so the * operator is necessary only when we want to read or write the
-          entire value that the reference points to.
-    * Converting a value from one type to another usually requires an explicit cast in Rust.
-        • Values of type &String auto-convert to type &str without a cast.
-        • Values of type &Vec<i32> auto-convert to &[i32].
-        • Values of type &Box<Chessboard> auto-convert to &Chessboard.
-    * ?
-        * ? also works similarly with the Option type. In a function that returns Option, you
-          can use ? to unwrap a value and return early in the case of None:
-          let weather = get_weather(hometown).ok()?;
-    * you can also change the type signature of main() to return a Result type,
-      so you can use ?:
-      fn main() -> Result<(), TideCalcError> {
-      let tides = calculate_tides()?;
-      print_tides(tides);
-      Ok(())
-      }
-    * This means patterns can be used to...
-      // ...unpack a struct into three new local variables
-      let Track { album, track_number, title, .. } = song;
-      // ...iterate over keys and values of a HashMap
-      for (id, document) in &cache_map {
-      println!("Document #{}: {}", id, document.title);
-      }
 1. attributes
     * You
       can disable the warning by adding an #[allow] attribute on the type:
@@ -1570,6 +1492,91 @@
       #[cfg]:
       #[cfg(target_os = "android")]
     * #[inline]
+
+## useful syntax
+* traversing with index
+    ```
+    let my_vec = vec!["apple", "banana", "cherry"];
+
+    for (index, value) in &my_vec.into_iter().enumerate() {
+        println!("Index: {}, Value: {}", index, value);
+    }
+    ```
+    * `IntoIterator::into_iter` convert its operand &v into an iterator
+* shadowing of let
+    ```
+    fn main() {
+        let mut count = 5;
+        let count = count + 1; // 6
+        let count = count * 2;  // 12
+        let mut count = count * 3; // 36
+        count += 1; // 37
+    }
+
+    ```
+* if let
+    * example
+        ```
+        if let Some(cookie) = request.session_cookie {
+            return restore_session(cookie);
+        }
+        ```
+    * shorthand for a match with one pattern
+        ```
+        if let pattern = expr {
+            block1
+        } else {
+            block2
+        }
+        ```
+        is equivalent of
+        ```
+        match expr {
+            pattern => { block1 }
+            _ => { block2 }
+        }
+        ```
+    ```
+    ```
+* return types
+    * return without a value is shorthand for return ()
+    * if the last expression isn’t followed by a semicolon, its value is the function’s return value
+    * `!` - expressions that don’t finish
+        ```
+        fn diverging_function() -> ! {
+            loop {
+                // This loop never exits, representing a function that diverges.
+            }
+        }
+        ```
+    * `main()` can also return `Result`
+* `?` operator
+    * example
+        ```
+        ```
+    * shorthand for a match expression
+        ```
+        let output = match File::create(filename) {
+            Ok(f) => f,
+            Err(err) => return Err(err)
+        };
+        ```
+* dot
+    * The unary * operator is used to access the value pointed to by a reference. As we’ve
+      seen, Rust automatically follows references when you use the . operator to access a
+      field or method, so the * operator is necessary only when we want to read or write the
+      entire value that the reference points to.
+* auto converting
+    * `&String => &str`
+    * `&Vec<i32> => &[i32]`
+    * `&Box<Chessboard> => &Chessboard`
+    * other type conversion requires an explicit cast in Rust
+* destructuring
+    ```
+    let Track { album, track_number, title, .. } = song;
+
+    for (id, document) in &cache_map
+    ```
 
 ## testing
 * convention
