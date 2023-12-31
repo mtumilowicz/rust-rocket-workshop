@@ -19,6 +19,7 @@
     * https://www.reddit.com/r/rust/comments/17luh6c/how_can_i_avoid_cloning_everywhere/
     * https://www.reddit.com/r/rust/comments/vy9zvw/the_docs_say_hashmap_is_send_sync_how_can_that_be/
     * https://stackoverflow.com/questions/26469715/how-do-i-write-a-rust-unit-test-that-ensures-that-a-panic-has-occurred
+    * https://www.reddit.com/r/rust/comments/ui7ayd/why_does_rust_not_have_a_standard_async_runtime/
 
 1. general
     * allocates on stack by default
@@ -705,6 +706,10 @@
               also carries a pointer to a vtable of method implementations.
             * A struct
               type’s last field (but only its last) may be unsized, and such a struct is itself unsized.
+        * debug, display
+            1. debug vs Display
+                * The #[derive(Debug)] attribute tells the compiler to generate some extra code that
+                  allows us to format the Arguments struct with {:?} in println!.
     * macros (derev)
     * static dispatch
         * Static dispatch is not something Go or Java have.
@@ -899,6 +904,27 @@
         }
 1. cargo
 1. references, smart pointers: box
+    * mutability
+        * In Rust, &mut means exclusive access. Plain & means shared access.
+        * Iterating over a mut reference provides a mut reference to each element:
+            for rs in &mut strings { // the type of rs is &mut String
+            rs.push('\n'); // add a newline to each string
+            }
+        * let mut numbers = Vec::new();
+        Even though vectors are designed to be grown and shrunk dynamically,
+          we must still mark the variable mut for Rust to let us push numbers onto the end of it.
+        * Rust’s rules for mutation and sharing:
+          Shared access is read-only access.
+          Values borrowed by shared references are read-only. Across the lifetime of a
+          shared reference, neither its referent, nor anything reachable from that referent,
+          can be changed by anything. There exist no live mutable references to anything in
+          that structure, its owner is held read-only, and so on. It’s really frozen.
+          Mutable access is exclusive access.
+          A value borrowed by a mutable reference is reachable exclusively via that refer‐
+          ence. Across the lifetime of a mutable reference, there is no other usable path to
+          its referent or to any value reachable from there. The only references whose life‐
+          times may overlap with a mutable reference are those you borrow from the muta‐
+          ble reference itself.
     * However, Rust also
       includes two kinds of fat pointers, two-word values carrying the address of some
       value, along with some further information necessary to put the value to use.
@@ -1210,188 +1236,7 @@
               rect @ Shape::Rect(..) => {
               optimized_paint(&rect)
               }
-1. String vs str
-    * Several standard library features share this little language for formatting strings:
-        • The format! macro uses it to build Strings.
-        • The println! and print! macros write formatted text to the standard output
-        stream.
-        • The writeln! and write! macros write it to a designated output stream.
-        • The panic! macro uses it to build an (ideally informative) expression of terminal
-        dismay.
-        * Formatting macros always borrow shared references to their arguments; they never
-          take ownership of them or mutate them.
-          The template’s {...} forms are called format parameters and have the form
-          {which:how}. Both parts are optional; {} is frequently used.
-          The which value selects which argument following the template should take the
-          parameter’s place. You can select arguments by index or by name. Parameters with no
-          which value are simply paired with arguments from left to right.
-          The how value says how the argument should be formatted: how much padding, to
-          which precision, in which numeric radix, and so on.
-    * The Rust String and str types represent text using the UTF-8 encoding form. UTF-8
-      encodes a character as a sequence of one to four bytes
-    * There are two restrictions on well-formed UTF-8 sequences.
-        * First, only the shortest
-        encoding for any given code point is considered well-formed; you can’t spend four
-        bytes encoding a code point that would fit in three.
-        * Second, well-formed UTF-8 must
-          not encode numbers from 0xd800 through 0xdfff or beyond 0x10ffff: those are
-          either reserved for noncharacter purposes or outside Unicode’s range entirely.
-    * Rust’s String and str types are guaranteed to hold only well-formed UTF-8.
-    * A String is implemented as a wrapper around a Vec<u8> that ensures the vector’s
-      contents are always well-formed UTF-8.
-    * String literals are enclosed in double quotes.
-        * let speech = "\"Ouch!\" said the well.\n";
-    * Rust strings are sequences of Unicode characters, but they are not stored in memory
-      as arrays of chars.
-      * Instead, they are stored using UTF-8, a variable-width encoding.
-      * Each ASCII character in a string is stored in one byte.
-      * A String has a resizable buffer holding UTF-8 text.
-      * The buffer is allocated on the
-        heap, so it can resize its buffer as needed or requested.
-      * You can think of a String as a Vec<u8> that is guaranteed to hold well-formed UTF-8;
-        * in fact, this is how String is implemented.
-    * A &str (pronounced “stir” or “string slice”) is a reference to a run of UTF-8 text
-      owned by someone else: it “borrows” the text.
-      * Like other slice references, a &str is a fat pointer, containing both the
-        address of the actual data and its length.
-      * The type &mut str does exist, but it is not very useful, since almost any operation on
-        UTF-8 can change its overall byte length, and a slice cannot reallocate its referent.
-        * In
-          fact, the only operations available on &mut str are make_ascii_uppercase and
-          make_ascii_lowercase, which modify the text in place and affect only single-byte
-          characters, by definition.
-    * &str is very much like &[T]: a fat pointer to some data. String is analogous to
-      Vec<T>,
-    * There are several ways to create Strings:
-        * The .to_string() method converts a &str to a String. This copies the string:
-          let error_message = "too many pets".to_string();
-          The .to_owned() method does the same thing, and you may see it used the same
-          way. It works for some other types as well,
-        * The format!() macro works just like println!(), except that it returns a new
-          String instead of writing text to stdout, and it doesn’t automatically add a new‐
-          line at the end:
-        * Arrays, slices, and vectors of strings have two methods, .concat()
-          and .join(sep), that form a new String from many strings:
-    * Keep in mind that, given the nature of Unicode, simple char-by-char comparison
-      does not always give the expected answers.
-      * For example, the Rust strings "th\u{e9}"
-        and "the\u{301}" are both valid Unicode representations for thé, the French word
-        for tea. Unicode says they should both be displayed and processed in the same way,
-        but Rust treats them as two completely distinct strings.
-    * So what is a String? That's three words; two are the same as for &str but it adds a third word which is the capacity of the str buffer on the heap, always on the heap (a str is not necessarily on the heap) it manages before it's filled and has to re-allocate. the String basically owns a str as they say; it controls it and can resize it and reallocate it when it sees fit. So a String is as said closer to a &str than to a str.
-    * Another thing is a Box<str>; this also owns a str and its runtime representation is the same as a &str but it also owns the str unlike the &str but it cannot resize it because it does not know its capacity so basically a Box<str> can be seen as a fixed-length String that cannot be resized (you can always convert it into a String if you want to resize it).
-    * &str is super useful to be able to to have multiple different substrings of a String without having to copy; as said a String owns the str on the heap it manages and if you could only create a substring of a String with a new String it would have to be copied because everything in Rust can only have one single owner to deal with memory safety. So for instance you can slice a string:
-        * let string: String   = "a string".to_string();
-        * let substring1: &str = &string[1..3];
-        * let substring2: &str = &string[2..4];
-    * String:
 
-      Rust's owned String type, the string itself lives on the heap and therefore is mutable and can alter its size and contents.
-      Because String is owned when the variables which owns the string goes out of scope the memory on the heap will be freed.
-      Variables of type String are fat pointers (pointer + associated metadata)
-      The fat pointer is 3 * 8 bytes (wordsize) long and consists of the following 3 elements:
-      Pointer to actual data on the heap, it points to the first character
-      Length of the string (# of characters)
-      Capacity of the string on the heap
-    * &str:
-
-      Rust's non-owned String type, it's immutable by default. The string itself lives somewhere else in memory usually on the heap or in 'static memory.
-      Because String is non-owned when &str variables go out of scope the memory of the string will not be freed.
-      Variables of type &str are fat pointers (pointer + associated metadata)
-      The fat pointer is 2 * 8 bytes (wordsize) long and consists of the following 2 elements:
-      Pointer to actual data on the heap, it points to the first character
-      Length of the string (# of characters)
-    * String is an Object.
-
-      &str is a pointer at a part of object.
-    * For C# and Java people:
-
-      Rust' String === StringBuilder
-      Rust's &str === (immutable) string
-    * String is the dynamic heap string type, like Vec: use it when you need to own or modify your string data.
-    * str is an immutable1 sequence of UTF-8 bytes of dynamic length somewhere in memory.
-    * In summary, use String if you need owned string data (like passing strings to other threads, or building them at runtime), and use &str if you only need a view of a string.
-    * similar to the relationship between by-value T and by-reference &T for general types
-    * Statically allocated objects are normally stored neither on the heap, nor the stack, but in their own region of memory
-    * As a rule of thumb: functions that do something with a string without needing to stash it away somewhere should take &str, functions that modify the String should take String, functions that need to store it for later should take String.
-    * See if you can use Arc<str> instead of String. This would make using .clone() faster because it wouldn't actually clone the strings at the cost of not being able to mutate the strings.
-    * Accepting &str in your function allows the caller to call the function multiple times without reallocating the string. Whereas taking String means the caller has to give you a brand new allocation with each call (since String always manages a heap allocation).
-    * Prefer &str if you are only reading it.
-    * String owns the data, &str references an already existing buffer. If you need ownership all the time, use String. If you don't want to copy, and know that you don't have to outlive the buffer use &str. If you want to have a little of both, use Cow. If you want maximum flexibility use Rc and the clone on write make_mut method.
-    * Literals evaluate to type &'static str, (and byte literals to &'static [u8]). The compiler copies the literal into the crate's read-only static space and generates a forever-valid reference to that value.
-    * Can't create a String at compile-time.  String owns a heap allocation, which happens at runtime, so there must be a runtime function call to do that allocation. They look like String::from("literal") in the source
-    * In short, &static str > &str > String
-
-      String is the simplest to work with because you own it: you can modify it, extend it etc ... The drawback is its performance: it is very slow (allocated on the heap). You can make an analogy with Vec.
-
-      &str (on the stack) is much faster than String. But you cannot modify it. This is only a borrowed version of a String, which means you cannot create new &str out of nothing. You can make an analogy with &[]
-
-      &'static str is the fastest one but also the less flexible: not only you cannot modify it but you need to know its value at compile time! You can make an analogy with [;N] EDIT: &'static []
-    * If you know a little more about Rust types, you may wonder why String is used instead of Box<str>
-        * The answer lies in the difference between the two types: Box<str> is a fixed‐size allocation, so you’d need to reallocate every time you push to the string, but String overallocates for efficiency in the usual case, storing a capacity member also to track that
-    * Rust “raw
-      string” syntax: the letter r, zero or more hash marks (that is, the # character), a dou‐
-      ble quote, and then the contents of the string, terminated by another double quote
-      followed by the same number of hash marks.
-        * Any character may occur within a raw
-          string without being escaped, including double quotes; in fact, no escape sequences
-          like \" are recognized.
-1. async
-    * Generally, asynchronous Rust code looks very much like ordinary multithreaded
-      code, except that operations that might block, like I/O or acquiring mutexes, need to
-      be handled a bit differently.
-    * Rust’s approach to supporting asynchronous operations is to introduce a trait,
-      std::future::Future:
-      trait Future {
-      type Output;
-      // For now, read `Pin<&mut Self>` as `&mut Self`.
-      fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>;
-      }
-      enum Poll<T> {
-      Ready(T),
-      Pending,
-      }
-      A future’s poll
-      method never waits for the operation to finish: it always returns immediately.
-      If and when the future is worth polling again, it
-      promises to let us know by invoking a waker, a callback function supplied in the
-      Context.
-      We call this the “piñata model” of asynchronous programming: the only
-      thing you can do with a future is whack it with a poll until a value falls out.
-    * One of the rules of the Future trait is that, once a future has returned Poll::Ready, it
-      may assume it will never be polled again. Some futures just return Poll::Pending
-      forever if they are overpolled; others may panic or hang. (They must not, however,
-      violate memory or thread safety, or otherwise cause undefined behavior.)
-    * • After each call that returns a future, the code says .await. Although this looks
-      like a reference to a struct field named await, it is actually special syntax built
-      into the language for waiting until a future is ready.
-    * Unlike an ordinary function, when you call an asynchronous function, it returns
-      immediately, before the body begins execution at all. Obviously, the call’s final return
-      value hasn’t been computed yet; what you get is a future of its final value.
-1. mutability
-    * In Rust, &mut means exclusive access. Plain & means shared access.
-    * Iterating over a mut reference provides a mut reference to each element:
-        for rs in &mut strings { // the type of rs is &mut String
-        rs.push('\n'); // add a newline to each string
-        }
-    * let mut numbers = Vec::new();
-    Even though vectors are designed to be grown and shrunk dynamically,
-      we must still mark the variable mut for Rust to let us push numbers onto the end of it.
-    * Rust’s rules for mutation and sharing:
-      Shared access is read-only access.
-      Values borrowed by shared references are read-only. Across the lifetime of a
-      shared reference, neither its referent, nor anything reachable from that referent,
-      can be changed by anything. There exist no live mutable references to anything in
-      that structure, its owner is held read-only, and so on. It’s really frozen.
-      Mutable access is exclusive access.
-      A value borrowed by a mutable reference is reachable exclusively via that refer‐
-      ence. Across the lifetime of a mutable reference, there is no other usable path to
-      its referent or to any value reachable from there. The only references whose life‐
-      times may overlap with a mutable reference are those you borrow from the muta‐
-      ble reference itself.
-1. debug vs Display
-    * The #[derive(Debug)] attribute tells the compiler to generate some extra code that
-      allows us to format the Arguments struct with {:?} in println!.
 
 1. attributes
     * You
@@ -1401,6 +1246,151 @@
       #[cfg]:
       #[cfg(target_os = "android")]
     * #[inline]
+
+
+## String vs str
+* UTF-8
+    * encodes a character as a sequence of one to four bytes
+    * restrictions
+        * only the shortest encoding for any given code point is considered well-formed
+            * example: can’t spend four bytes encoding a code point that would fit in three
+        * must not encode numbers from `0xd800` through `0xdfff` or beyond `0x10ffff`
+            * either reserved for noncharacter purposes or outside Unicode’s range entirely
+* sequences of Unicode characters stored as a well-formed UTF-8 encoding
+    * simple char-by-char comparison does not always give the expected answers
+        * example: `th\u{e9}` and `the\u{301}`` are both valid Unicode representations for thé
+            * Rust treats them as two completely distinct strings
+* formatting macros
+    * `format!` builds `Strings`
+    * `println!` writes to the standard output
+    * `writeln!` writes to a designated output stream
+    * always borrow shared references
+        * never take ownership or mutate them
+    * example
+        ```
+        let formatted_string = format!("Hello, {}! You are {} years old.", name, age);
+        println!("{}", formatted_string);
+        let mut buffer = Vec::new();
+        writeln!(buffer, formatted_string); // write a formatted string to the buffer
+        ```
+* for Java people:
+    * Rust' String === StringBuilder
+    * Rust's &str === (immutable) string
+* `String`
+    * implemented as a wrapper around a Vec<u8>
+        * ensures the vector’s contents are always well-formed UTF-8
+    * usually lives on the heap and therefore is mutable and can alter its size and contents
+        * statically allocated objects are normally stored neither on the heap, nor the stack, but in their own region of memory
+    * `.to_string()` vs `.to_owned()`
+        * `.to_owned()` does the same as `.to_string()` but works for some other types as well
+    * vs `&str`
+        * `String` is an Object, `&str` is a pointer at a part of object
+        * similar to the relationship between by-value `T` and by-reference `&T` for general types
+* `&str`
+    * pronounced "stir" or "string slice"
+    * reference to a run of UTF-8 text
+        * owned by someone else: it "borrows" the text
+    * fat pointer like other slice references
+        * contains address of the actual data and its length
+    * immutable by default
+    * type `&mut str` does exist, but it is not very useful
+        * slice cannot reallocate its referent
+            * almost any operation on UTF-8 can change its overall byte length
+        * only available operations: `make_ascii_uppercase` and `make_ascii_lowercase`
+            * by definition: modify the text in place and affect only single-byte characters
+        * is very much like &[T]
+    * raw syntax
+        ```
+        let json_data: &str = r#"
+            {
+                "name": "John Doe",
+                "age": 30,
+                "city": "New York",
+                "is_student": false,
+                "grades": [90, 85, 95]
+            }
+        "#;
+        ```
+* So what is a String? That's three words; two are the same as for &str but it adds a third word which is the capacity of the str buffer on the heap, always on the heap (a str is not necessarily on the heap) it manages before it's filled and has to re-allocate. the String basically owns a str as they say; it controls it and can resize it and reallocate it when it sees fit. So a String is as said closer to a &str than to a str.
+* Another thing is a Box<str>; this also owns a str and its runtime representation is the same as a &str but it also owns the str unlike the &str but it cannot resize it because it does not know its capacity so basically a Box<str> can be seen as a fixed-length String that cannot be resized (you can always convert it into a String if you want to resize it).
+* &str is super useful to be able to to have multiple different substrings of a String without having to copy; as said a String owns the str on the heap it manages and if you could only create a substring of a String with a new String it would have to be copied because everything in Rust can only have one single owner to deal with memory safety. So for instance you can slice a string:
+    * let string: String   = "a string".to_string();
+    * let substring1: &str = &string[1..3];
+    * let substring2: &str = &string[2..4];
+* rule of thumb
+    * use String if you need owned string data (like passing strings to other threads, or building them at runtime)
+    * use &str if you only need a view of a string
+    * functions arguments
+        * pass &str if function does something with a string without needing to stash it away somewhere
+        * pass `String` if function modifies or needs to store it for later
+
+
+* str is an immutable1 sequence of UTF-8 bytes of dynamic length somewhere in memory.
+
+* String owns the data, &str references an already existing buffer. If you need ownership all the time, use String. If you don't want to copy, and know that you don't have to outlive the buffer use &str. If you want to have a little of both, use Cow. If you want maximum flexibility use Rc and the clone on write make_mut method.
+* Literals evaluate to type &'static str, (and byte literals to &'static [u8]). The compiler copies the literal into the crate's read-only static space and generates a forever-valid reference to that value.
+* Can't create a String at compile-time.  String owns a heap allocation, which happens at runtime, so there must be a runtime function call to do that allocation. They look like String::from("literal") in the source
+* In short, &static str > &str > String
+
+  String is the simplest to work with because you own it: you can modify it, extend it etc ... The drawback is its performance: it is very slow (allocated on the heap). You can make an analogy with Vec.
+
+  &str (on the stack) is much faster than String. But you cannot modify it. This is only a borrowed version of a String, which means you cannot create new &str out of nothing. You can make an analogy with &[]
+
+  &'static str is the fastest one but also the less flexible: not only you cannot modify it but you need to know its value at compile time! You can make an analogy with [;N] EDIT: &'static []
+* If you know a little more about Rust types, you may wonder why String is used instead of Box<str>
+    * The answer lies in the difference between the two types: Box<str> is a fixed‐size allocation, so you’d need to reallocate every time you push to the string, but String overallocates for efficiency in the usual case, storing a capacity member also to track that
+* Rust “raw
+  string” syntax: the letter r, zero or more hash marks (that is, the # character), a dou‐
+  ble quote, and then the contents of the string, terminated by another double quote
+  followed by the same number of hash marks.
+    * Any character may occur within a raw
+      string without being escaped, including double quotes; in fact, no escape sequences
+      like \" are recognized.
+
+## async
+* keywords
+    * `async` - used to define of asynchronous functions
+    * `.await` - blocks until a future is ready
+* async runtime
+    * provides the infrastructure for running asynchronous tasks and managing concurrency
+    * example: tokio
+    * why it is not part of std?
+        * 3rd party crates can typically afford to move faster
+        * different Async runtimes will be better for different use cases
+            * example: tokio is a great library for things like web servers, but not ideal for microcontrollers
+        * Rust is often used to do embedded software, where some functions of the async runtime
+        are actually provided by the environment, and the other features are not desired
+            * example: macroquad game engine, which has async as a useful abstraction for doing animation
+            frame timing, but does not require an async runtime
+        * green threading model was remove before 1.0
+* example
+    ```
+    async fn async_function() { ... } // async definition
+
+    #[tokio::main] // async runtime
+    async fn main() {
+        async_function().await; // wait
+    }
+    ```
+* `std::future::Future`
+    * approach to supporting asynchronous operations
+    * async function returns Future immediately
+    * trait
+        ```
+        trait Future {
+            type Output;
+
+            // never waits, returns immediately
+            // piñata model: whack it with a poll until a value falls out
+            fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>;
+        }
+
+        enum Poll<T> {
+            Ready(T),
+            Pending,
+        }
+        ```
+    * rule: once a future has returned Poll::Ready => never be polled again
 
 ## collections
 * iteration
