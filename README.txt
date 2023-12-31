@@ -18,6 +18,7 @@
     * https://stackoverflow.com/questions/65434252/how-to-return-a-reference-to-a-value-from-hashmap-wrappered-in-arc-and-mutex-in
     * https://www.reddit.com/r/rust/comments/17luh6c/how_can_i_avoid_cloning_everywhere/
     * https://www.reddit.com/r/rust/comments/vy9zvw/the_docs_say_hashmap_is_send_sync_how_can_that_be/
+    * https://stackoverflow.com/questions/26469715/how-do-i-write-a-rust-unit-test-that-ensures-that-a-panic-has-occurred
 
 1. general
     * allocates on stack by default
@@ -1569,37 +1570,58 @@
       #[cfg]:
       #[cfg(target_os = "android")]
     * #[inline]
-## testing
-* Tests are ordinary functions marked with the #[test]
-  attribute: #[test]
-* Tests commonly use the assert! and assert_eq! macros from the Rust standard
-  library. assert!(expr) succeeds if expr is true. Otherwise, it panics, which causes the
-  test to fail. assert_eq!(v1, v2) is just like assert!(v1 == v2) except that if the
-  assertion fails, the error message shows both values.
-* To test error cases, add the #[should_panic] attribute to your test:
-    #[test]
-    #[allow(unconditional_panic, unused_must_use)]
-    #[should_panic(expected="divide by zero")]
-* Functions marked with #[test] are compiled conditionally.
-    * A plain cargo build or
-      cargo build --release skips the testing code.
-    * But when you run cargo test,
-      Cargo builds your program twice: once in the ordinary way and once with your tests
-      and the test harness enabled.
-* So the convention, when your tests get substantial enough to require support code, is
-  to put them in a tests module and declare the whole module to be testing-only using
-  the #[cfg] attribute:
-  #[cfg(test)] // include this module only when testing
-  mod tests {
 
-  }
-* To disable this, either run a single
-  test, cargo test testname, or run cargo test -- --test-threads 1. (The first --
-  ensures that cargo test passes the --test-threads option through to the test exe‐
-  cutable.)
-* Integration tests are .rs files that live in a tests directory alongside your project’s src
-  directory.
-  * When you run cargo test, Cargo compiles each integration test as a sepa‐
-    rate, standalone crate, linked with your library and the Rust test harness.
-  * Integration tests are valuable in part because they see your crate from the outside, just
-    as a user would. They test the crate’s public API.
+## testing
+* convention
+    ```
+    #[cfg(test)] // include this module only when testing
+    mod tests {
+        #[test] // tests are ordinary functions marked with the `#[test]`
+        fn first_test() {
+            assert!(true)
+        }
+    }
+    ```
+* `cargo build --release` skips the testing code
+* assertions
+    * `assert!`, `assert_eq!`, `assert_ne!`
+    * macros from the Rust standard library
+    * panics, which causes the test to fail
+* integration tests
+    * `.rs` files that live in a `tests` directory alongside `src`
+    * `cargo test` compiles each integration test as a separate, standalone crate, linked with your library
+    and the Rust test harness
+* run tests from a file
+    * cargo test --test file_name
+* parallelization
+    * `cargo test -- --test-threads=4`
+        * first `--` is used to separate the arguments passed to cargo itself from the arguments
+        passed to the test binaries
+* testing panic cases
+    * example
+        ```
+        #[test]
+        #[allow(unconditional_panic)]
+        #[should_panic(expected = "expected panic message")]
+        fn test_panicking_function_with_message() {
+            panic!("expected panic message");
+        }
+        ```
+        * `unconditional_panic` allows the code to use the panic! macro without triggering a warning about an unconditional panic
+    * not recommended
+        * when expected error we should use `Result`
+        * usually panic should be considered a failure
+    * Rust standard library itself includes tests that validate panic behavior
+        ```
+        #[test]
+        #[should_panic]
+        fn test_panic_macro() {
+            panic!("This is a panic message");
+        }
+
+        #[test]
+        #[should_panic]
+        fn test_unreachable_macro() {
+            unreachable!("This code is unreachable");
+        }
+        ```
