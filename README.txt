@@ -1392,98 +1392,7 @@
 1. debug vs Display
     * The #[derive(Debug)] attribute tells the compiler to generate some extra code that
       allows us to format the Arguments struct with {:?} in println!.
-1. collections
-    * Vec<T>, VecDeque<T>, LinkedList<T>, BinaryHeap<T>, HashMap<K, V>
-    * BTreeMap<K, V>, HashSet<T>, BTreeSet<T>
-        * BTreeMap - Sorted key-value table
-    * Vec
-        * a vector has three fields: the length, the capacity, and a
-          pointer to a heap allocation where the elements are stored.
-        * All of a vector’s elements are stored in a contiguous, heap-allocated chunk of mem‐
-          ory. The capacity of a vector is the maximum number of elements that would fit in
-          this chunk. Vec normally manages the capacity for you, automatically allocating a
-          larger buffer and moving the elements into it when more space is needed.
-        * java: ConcurrentModificationException
-            fn main() {
-            let mut my_vec = vec![1, 3, 5, 7, 9];
-            for (index, &val) in my_vec.iter().enumerate() { // borrows a shared (non-mut) reference to the vector
-            if val > 4 {
-            my_vec.remove(index); // error: can't borrow `my_vec` as mutable
-            }
-            }
-            println!("{:?}", my_vec);
-            }
-            The easiest fix here is to write:
-            my_vec.retain(|&val| val <= 4);
-    * HashMap
-        * All keys, values, and cached hash codes are stored in a single heap-allocated table.
-          Adding entries eventually forces the HashMap to allocate a larger table and move all
-          the data into it.
-        * let record = student_map.entry(name.to_string()).or_insert_with(Student::new);
-        * map.entry(key).or_insert(value)
-            * returns a mut reference to the new or existing value
-            let mut vote_counts: HashMap<String, usize> = HashMap::new();
-            for name in ballots {
-            let count = vote_counts.entry(name).or_insert(0);
-            *count += 1;
-            }
-        * map.entry(key).and_modify(closure)
-            let mut word_frequency: HashMap<&str, u32> = HashMap::new();
-            for c in text.split_whitespace() {
-            word_frequency.entry(c)
-            .and_modify(|count| *count += 1)
-            .or_insert(1);
-            }
-        * Map Iteration
-            • Iterating by value (for (k, v) in map) produces (K, V) pairs. This consumes
-            the map.
-            • Iterating over a shared reference (for (k, v) in &map) produces (&K, &V)
-            pairs.
-            • Iterating over a mut reference (for (k, v) in &mut map) produces (&K, &mut
-            V) pairs. (Again, there’s no way to get mut access to keys stored in a map, because
-            the entries are organized by their keys.)
-    * BTree
-        * The Rust standard library uses B-trees rather than balanced binary trees because B-
-          trees are faster on modern hardware. A binary tree may use fewer comparisons per
 
-          search than a B-tree, but searching a B-tree has better locality—that is, the memory
-          accesses are grouped together rather than scattered across the whole heap. This
-          makes CPU cache misses rarer. It’s a significant speed boost.
-    * Rust uses moves to avoid deep-copying
-      values. That’s why the method Vec<T>::push(item) takes its argument by value, not
-      by reference.
-      * The value is moved into the vector.
-    * A Vec<T> consists of three values: a pointer to the heap-allocated buffer for the ele‐
-      ments, which is created and owned by the Vec<T>; the number of elements that buffer
-      has the capacity to store; and the number it actually contains now (in other words, its
-      length).
-        * When the buffer has reached its capacity, adding another element to the vec‐
-          tor entails allocating a larger buffer, copying the present contents into it, updating the
-          vector’s pointer and capacity to describe the new buffer, and finally freeing the old
-          one.
-        * popping a value from a Vec<T> returns an Option<T>: None if the vector was already
-          empty, or Some(v) if its last element had been v:
-    * Slices
-        * A slice, written [T] without specifying the length, is a region of an array or vector.
-        * A reference to a slice is a fat pointer: a two-word value comprising a pointer to the
-          slice’s first element, and the number of elements in the slice.
-        * a reference
-          to a slice is a non-owning pointer to a range of consecutive values in memory.
-        * fn print(n: &[f64]) { // you can apply it to either a vector or an array,
-            print(&a); // works on arrays
-            print(&v); // works on vectors
-        * shown. In fact, many methods you might think of as belonging
-          to vectors or arrays are methods defined on slices: for example, the sort and reverse
-          methods, which sort or reverse a sequence of elements in place, are actually methods
-          on the slice type [T].
-    * HashMap
-        * for (artist, works) in table
-        * In particular, HashMap is not Copy—it can’t be, since it
-          owns a dynamically allocated table.
-        * Iterating over a
-          shared reference to a HashMap is defined to produce shared references to each entry’s
-          key and value: artist has changed from a String to a &String, and works from a
-          Vec<String> to a &Vec<String>.
 1. attributes
     * You
       can disable the warning by adding an #[allow] attribute on the type:
@@ -1493,16 +1402,108 @@
       #[cfg(target_os = "android")]
     * #[inline]
 
-## useful syntax
-* traversing with index
-    ```
-    let my_vec = vec!["apple", "banana", "cherry"];
+## collections
+* iteration
+    * by value
+        * consumes the collection
+        * example: `for (k, v) in map`
+    * over shared reference
+        * produces references
+        * example: `for (k, v) in &map`
+    * over mut reference
+        * produces mut references
+        * example: `for (k, v) in &mut map`
+            * produces `(&K, &mut V)` pairs
+            * there’s no way to get mut access to keys stored in a map, because
+                  the entries are organized by their keys
+* modification
+    * Rust uses moves to avoid deep-copying values
+    * example: `Vec<T>::push(item)` takes its argument by value
+        * value is moved into the vector
+* usually are not not Copy
+    * they can’t be, since they owns a dynamically allocated table
+* `Vec<T>`
+    * memory
+        * three fields
+            * the length
+            * the capacity
+                * manages the capacity for you, automatically allocating a larger buffer and moving the elements into it when more space is needed
+            * pointer to a heap allocation where the elements are stored
+                * created and owned by the `Vec<T>`
+            * elements are stored in a contiguous, heap-allocated chunk of memory
+    * protection against modifications during traversal
+        * java digression: `ConcurrentModificationException`
+        * example
+            ```
+            let mut v = vec![10];
+            for (index, &val) in v.iter().enumerate() { borrows a shared (non-mut) reference to the vector
+                if val > 10 {
+                    v.remove(index); // can't borrow `v` as mutable
+                }
+            }
+            ```
+        * solution: use build in functions
+            ```
+            v.retain(|&val| val <= 10)
+            ```
+    * `VecDeque<T>` - double-ended queue (deque)
+* `HashMap<K, V>`
+    * memory
+        * keys, values, and cached hash codes are stored in a single heap-allocated table
+        * adding entries eventually forces the HashMap to allocate a larger table and move all
+          the data into it
+    * useful methods
+        * get or insert
+            ```
+            for id in balances {
+                let balance = bank.entry(id).or_insert(0);
+                *count += 1;
+            }
+            ```
+        * modify value: `map.entry(key).and_modify(closure)`
+        * modify or insert
+            ```
+            balances.entry(id)
+            .and_modify(|count| *count += 1)
+            .or_insert(1);
+            ```
+    * `BTreeMap` - maintains its keys in sorted order.
+        * Rust standard library uses B-trees rather than balanced binary trees because B-trees
+        are faster on modern hardware
+            * binary tree may use fewer comparisons per search than a B-tree, but searching a B-tree has better locality
+            * memory accesses are grouped together rather than scattered across the whole heap
+                * makes CPU cache misses rarer
+* Slice
+    * is a region of an array or vector
+    * notation: `[T]`
+    * example
+        ```
+        fn do_something(n: &[String]) { // either a vector or an array
+        do_something(&a); // works on arrays
+        do_something(&v); // works on vectors
+        ```
+    * many methods are defined on slices
+        * example: sort, reverse
+    * memory: two-word value (fat not-owning pointer)
+        * pointer to the slice’s first element
+        * number of elements in the slice
+* other: `LinkedList<T>`, `BinaryHeap<T>`, `HashSet<T>`, `BTreeSet<T>`
 
-    for (index, value) in &my_vec.into_iter().enumerate() {
-        println!("Index: {}, Value: {}", index, value);
-    }
-    ```
-    * `IntoIterator::into_iter` convert its operand &v into an iterator
+## useful syntax
+* traversing collections
+    * with index
+        ```
+        let my_vec = vec!["apple", "banana", "cherry"];
+
+        for (index, value) in &my_vec.into_iter().enumerate() {
+            println!("Index: {}, Value: {}", index, value);
+        }
+        ```
+        * `IntoIterator::into_iter` convert its operand &v into an iterator
+    * with destructuring
+        ```
+        for (&key, &value) in &my_map { ... }
+        ```
 * shadowing of let
     ```
     fn main() {
@@ -1574,8 +1575,6 @@
 * destructuring
     ```
     let Track { album, track_number, title, .. } = song;
-
-    for (id, document) in &cache_map
     ```
 
 ## testing
