@@ -5,16 +5,10 @@ use rocket::serde::json::Json;
 use serde_derive::{Deserialize, Serialize};
 use crate::domain::customer::{Customer, CustomerError, CustomerService, NewCustomerCommand};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct NewCustomerApiInput {
     name: String,
-}
-
-impl NewCustomerApiInput {
-    pub fn new(name: String) -> Self {
-        NewCustomerApiInput { name: name }
-    }
 }
 
 impl Into<NewCustomerCommand> for NewCustomerApiInput {

@@ -10,13 +10,15 @@ async fn test_create_and_get_customer() {
     let rocket = app::server().await;
     let client = Client::tracked(rocket).await.expect("valid rocket instance");
 
-    let new_customer_input = NewCustomerApiInput::new(
-        "John Doe".to_string(),
-    );
+    let new_customer_input = r#"
+        {
+            "name": "John Doe"
+        }
+    "#;
 
     let create_response = client.post("/api/customers")
         .header(ContentType::JSON)
-        .body(serde_json::to_string(&new_customer_input).unwrap())
+        .body(new_customer_input)
         .dispatch()
         .await;
 
