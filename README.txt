@@ -20,6 +20,9 @@
     * https://www.reddit.com/r/rust/comments/vy9zvw/the_docs_say_hashmap_is_send_sync_how_can_that_be/
     * https://stackoverflow.com/questions/26469715/how-do-i-write-a-rust-unit-test-that-ensures-that-a-panic-has-occurred
     * https://www.reddit.com/r/rust/comments/ui7ayd/why_does_rust_not_have_a_standard_async_runtime/
+    * https://rustjobs.dev/blog/difference-between-string-and-str-in-rust/
+    * https://doc.rust-lang.org/std
+    * https://users.rust-lang.org/t/whats-the-difference-between-string-and-str/10177/2
 
 1. general
     * allocates on stack by default
@@ -1248,7 +1251,7 @@
     * #[inline]
 
 
-## String vs str
+## String vs !str vs str
 * UTF-8
     * encodes a character as a sequence of one to four bytes
     * restrictions
@@ -1279,14 +1282,26 @@
 * `String`
     * implemented as a wrapper around a Vec<u8>
         * ensures the vector’s contents are always well-formed UTF-8
-    * usually lives on the heap and therefore is mutable and can alter its size and contents
-        * statically allocated objects are normally stored neither on the heap, nor the stack, but in their own region of memory
+    * lives on the heap and therefore is mutable and can alter its size and contents
+        * it is very slow
+    * can't be created at compile-time => there must be a runtime function call to do that allocation
+        * `String::from("literal")`
     * `.to_string()` vs `.to_owned()`
         * `.to_owned()` does the same as `.to_string()` but works for some other types as well
     * vs `&str`
         * `String` is an Object, `&str` is a pointer at a part of object
         * similar to the relationship between by-value `T` and by-reference `&T` for general types
+    * vs `Box<str>`
+        * `Box<str>` owns a `str` (unlike the `&str`)
+        * runtime representation is the same as a `&str`
+        * can be seen as a fixed-length String that cannot be resized
+            * cannot resize `str` because it does not know its capacity
+            * you’d need to reallocate every time you push to the string, but String overallocates for efficiency
 * `&str`
+    * vs `&String`
+        * `&str` is a reference directly into the backing storage of the String, while `&String` is a reference to the "wrapper" object
+        * `&str` can be used for substrings, i.e. they are slices
+            * `&String&String` references always the whole string
     * pronounced "stir" or "string slice"
     * reference to a run of UTF-8 text
         * owned by someone else: it "borrows" the text
@@ -1311,41 +1326,29 @@
             }
         "#;
         ```
-* So what is a String? That's three words; two are the same as for &str but it adds a third word which is the capacity of the str buffer on the heap, always on the heap (a str is not necessarily on the heap) it manages before it's filled and has to re-allocate. the String basically owns a str as they say; it controls it and can resize it and reallocate it when it sees fit. So a String is as said closer to a &str than to a str.
-* Another thing is a Box<str>; this also owns a str and its runtime representation is the same as a &str but it also owns the str unlike the &str but it cannot resize it because it does not know its capacity so basically a Box<str> can be seen as a fixed-length String that cannot be resized (you can always convert it into a String if you want to resize it).
-* &str is super useful to be able to to have multiple different substrings of a String without having to copy; as said a String owns the str on the heap it manages and if you could only create a substring of a String with a new String it would have to be copied because everything in Rust can only have one single owner to deal with memory safety. So for instance you can slice a string:
-    * let string: String   = "a string".to_string();
-    * let substring1: &str = &string[1..3];
-    * let substring2: &str = &string[2..4];
+    * useful to be able to to have multiple different substrings of a String without having to copy
+        * example
+            ```
+            let string: String   = "a string".to_string();
+            let substring1: &str = &string[1..3];
+            let substring2: &str = &string[2..4];
+            ```
+    * `&static str`
+        * fastest one but also the less flexible
+            * literals evaluate to type `&'static str`
+        * cannot be modified and its value needs to be known at compile time
+        * compiler copies the literal into the crate's read-only static space and generates a forever-valid reference to that value
+* `str`
+    * fixed-length, stack or heap allocated string slice
+    * is an immutable sequence of UTF-8 bytes of dynamic length somewhere in memory
+    * cannot create a standalone value of type `str`
+        * always in its borrowed form: `&str`
 * rule of thumb
     * use String if you need owned string data (like passing strings to other threads, or building them at runtime)
     * use &str if you only need a view of a string
     * functions arguments
         * pass &str if function does something with a string without needing to stash it away somewhere
         * pass `String` if function modifies or needs to store it for later
-
-
-* str is an immutable1 sequence of UTF-8 bytes of dynamic length somewhere in memory.
-
-* String owns the data, &str references an already existing buffer. If you need ownership all the time, use String. If you don't want to copy, and know that you don't have to outlive the buffer use &str. If you want to have a little of both, use Cow. If you want maximum flexibility use Rc and the clone on write make_mut method.
-* Literals evaluate to type &'static str, (and byte literals to &'static [u8]). The compiler copies the literal into the crate's read-only static space and generates a forever-valid reference to that value.
-* Can't create a String at compile-time.  String owns a heap allocation, which happens at runtime, so there must be a runtime function call to do that allocation. They look like String::from("literal") in the source
-* In short, &static str > &str > String
-
-  String is the simplest to work with because you own it: you can modify it, extend it etc ... The drawback is its performance: it is very slow (allocated on the heap). You can make an analogy with Vec.
-
-  &str (on the stack) is much faster than String. But you cannot modify it. This is only a borrowed version of a String, which means you cannot create new &str out of nothing. You can make an analogy with &[]
-
-  &'static str is the fastest one but also the less flexible: not only you cannot modify it but you need to know its value at compile time! You can make an analogy with [;N] EDIT: &'static []
-* If you know a little more about Rust types, you may wonder why String is used instead of Box<str>
-    * The answer lies in the difference between the two types: Box<str> is a fixed‐size allocation, so you’d need to reallocate every time you push to the string, but String overallocates for efficiency in the usual case, storing a capacity member also to track that
-* Rust “raw
-  string” syntax: the letter r, zero or more hash marks (that is, the # character), a dou‐
-  ble quote, and then the contents of the string, terminated by another double quote
-  followed by the same number of hash marks.
-    * Any character may occur within a raw
-      string without being escaped, including double quotes; in fact, no escape sequences
-      like \" are recognized.
 
 ## async
 * keywords
