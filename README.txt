@@ -943,75 +943,6 @@
           The Arc is passed to the test function, which spawns a worker thread. The worker thread may outlive the current block and attempt to access the shared reference r after it has gone out of scope.
           Undefined Behavior:
           When the worker thread accesses the shared reference after the original block has ended, it leads to undefined behavior. The reference r is no longer valid, as it points to memory that has been deallocated.
-1. closures
-    * closures that don’t capture anything from their environment are identical to
-      function pointers,
-    * In this case, when Rust creates the closure, it automatically borrows a reference to
-      stat. It stands to reason: the closure refers to stat, so it must have a reference to it.
-    * The closure is subject to the rules about borrowing and lifetimes
-        * In particular, since the closure contains a reference to
-          stat, Rust won’t let it outlive stat. Since the closure is only used during sorting, this
-          example is fine.
-    * tell Rust to move cities and stat into the
-      closures that use them instead of borrowing references to them.
-      * The move keyword tells Rust that a closure doesn’t borrow the variables it uses:
-        it steals them.
-      * The first closure, key_fn, takes ownership of stat. Then the second closure takes
-        ownership of both cities and key_fn.
-    * Rust thus offers two ways for closures to get data from enclosing scopes: moves and
-      borrowing.
-      * Just as everywhere else in the language, if a closure would move a value of a copy‐
-        able type, like i32, it copies the value instead.
-      * Values of noncopyable types, like Vec<City>, really are moved: the preceding
-        code transfers cities to the new thread, by way of the move closure.
-        * Rust would
-          not let us access cities by name after creating the closure.
-    * After all this, it may come as a surprise that closures do not have the same type as
-      functions:
-      fn count_selected_cities(cities: &Vec<City>,
-      test_fn: fn(&City) -> bool) -> usize
-      vs
-      fn count_selected_cities<F>(cities: &Vec<City>, test_fn: F) -> usize
-      where F: Fn(&City) -> bool
-      This trait is automatically implemented by all
-      functions and most closures that take a single &City as an argument and return a
-      Boolean value:
-      * In fact, every closure you write has its own type, because a closure may contain data:
-        values either borrowed or stolen from enclosing scopes.
-        * So every closure has an ad hoc type created by
-          the compiler, large enough to hold that data.
-        * No two closures have exactly the same
-          type. But every closure implements an Fn trait;
-    * FnOnce,
-        * Closures that drop values, like f, are
-          not allowed to have Fn. They are, quite literally, no Fn at all. They implement a less
-          powerful trait, FnOnce, the trait of closures that can be called once.
-        let my_str = "hello".to_string();
-        let f = || drop(my_str);
-        f(); // ok
-        f(); // error: use of moved value
-
-        fn call_twice<F>(closure: F) where F: Fn() {
-        closure();
-        closure();
-        }
-        let my_str = "hello".to_string();
-        let f = || drop(my_str);
-        call_twice(f);
-    || {body} when no param
-    |a| {body} with param
-    * Note that, unlike functions declared with fn, we don’t need to declare the
-      types of a closure’s arguments; Rust will infer them, along with its return type.
-    * For example, the function
-      cmp_by_timestamp_then_name could not use v directly. (Rust also has closures, which
-      do see into enclosing scopes.
-        let mut v = vec![];
-        ...
-        fn cmp_by_timestamp_then_name(a: &FileInfo, b: &FileInfo) -> Ordering {
-        a.timestamp.cmp(&b.timestamp) // first, compare timestamps
-        .reverse() // newest file first
-        .then(a.path.cmp(&b.path)) // compare paths to break ties
-        }
 1. cargo
 1. attributes
     * You
@@ -1021,6 +952,85 @@
       #[cfg]:
       #[cfg(target_os = "android")]
     * #[inline]
+
+## closures
+* closure may contain data
+    * subject to the rules about borrowing and lifetimes
+        * two ways for closures to get data from enclosing scopes
+            * moves
+                ```
+                let name = String::from("John");
+
+                // without move it will borrow the variable by reference (default behaviour)
+                let print_name = move || { // used to indicate that the closure should take ownership of the variable
+                    println!("Hello, {}", name);
+                };
+
+                println!("Hello, {}", name); // compilation error: value borrowed here after move
+                ```
+            * borrowing
+                * default behavior for closures in Rust is to capture variables by reference
+    * example
+        * For example, the function
+          cmp_by_timestamp_then_name could not use v directly. (Rust also has closures, which
+          do see into enclosing scopes.
+            let mut v = vec![];
+            ...
+            fn cmp_by_timestamp_then_name(a: &FileInfo, b: &FileInfo) -> Ordering {
+            a.timestamp.cmp(&b.timestamp) // first, compare timestamps
+            .reverse() // newest file first
+            .then(a.path.cmp(&b.path)) // compare paths to break ties
+            }
+* implements an `Fn` trait
+    * note that `fn` is not a trait
+        * cannot be used in `where` clause
+    *  is a trait that represents types that can be called as if they were functions
+        ```
+        pub trait Fn<Args> { // simplified
+            type Output;
+            fn call(&self, args: Args) -> Self::Output; // self passed by reference
+        }
+        ```
+    * automatically implemented by all functions
+    * used primarily for working with closures
+        * for example: `HashMap` not implements `Fn`
+    * `FnOnce`
+        * represents closures that can be invoked only once
+            ```
+            pub trait Fn<Args> { // simplified
+                type Output;
+                fn call(self, args: Args) -> Self::Output; // self passed by value
+            }
+            ```
+        * example
+            ```
+            let map = ...
+            let f = || {
+                for (key, value) in map { // consumes map
+                    ...
+                }
+            }
+            f(); // ok
+            f(); // error: use of moved value
+* usually do not have the same type as functions
+    * if don’t capture anything are identical to function pointers
+        * example
+            ```
+            fn function() {
+                println!("I'm a regular function!");
+            }
+
+            let fn_ptr: fn() = function; // function pointer, implements Fn as well
+
+            let closure: fn() = || { // closure without capturing anything
+                println!("I'm a closure without capturing anything!");
+            };
+            ```
+    * every closure has its own type
+        * no two closures have exactly the same type
+        * ad hoc type created by the compiler, large enough to hold that data
+* we don’t need to declare the types of a closure’s arguments
+    * Rust will infer them, along with its return type
 
 ## references
 * Rust’s basic pointer type
