@@ -36,6 +36,10 @@
           against a kind of denial-of-service attack called HashDoS, where attackers deliber‐
           ately use hash collisions to trigger worst-case performance in a server.
 1. ownership and borrowing
+    * In
+      Java, if class Rectangle contains a field Vector2D upperLeft;, then upperLeft is a
+      reference to another separately created Vector2D object. Objects never physically
+      contain other objects in Java.
     * Rust’s borrow system can’t protect
       you from deadlock.
       * The best protection is to keep critical sections small: get in, do
@@ -61,6 +65,66 @@
     excused from the ownership rules. These are called Copy types.
     • The standard library provides the reference-counted pointer types Rc and Arc,
     which allow values to have multiple owners, under some restrictions.
+    * returns a value referencing data owned by the current function
+        * How to return a reference to a value from Hashmap wrappered in Arc and Mutex in Rust?
+        ```
+        use std::sync::{Arc,Mutex};
+        use std::collections::HashMap;
+
+        struct Hey{
+            a:Arc<Mutex<HashMap<String, String>>>
+        }
+
+
+        impl Hey {
+            fn get(&self,key:&String)->&String{
+                self.a.lock().unwrap().get(key).unwrap() // compilation error: returns a value referencing data owned by the current function
+            }
+        }
+        ```
+        * If that return type were allowed to point inside the Mutex's data, there would be nothing stopping other code from locking the mutex and deleting the entry, meaning that the returned reference would point at something that was deallocated
+        * If it's allowed, the map might change due to the operation from another thread, and it's UB
+            * A reference-counting loop; these objects will not be freed
+                * It is possible to leak values in Rust this way, but such situations are rare. You cannot
+                  create a cycle without, at some point, making an older value point to a newer value.
+                  This obviously requires the older value to be mutable. Since Rc pointers hold their
+                  referents immutable, it’s not normally possible to create a cycle.
+                  * interior mutability
+                    * If you com‐
+                      bine those techniques with Rc pointers, you can create a cycle and leak memory.
+                    * You can sometimes avoid creating cycles of Rc pointers by using weak pointers,
+                      std::rc::Weak, for some of the links instead.
+                    * What we need is a little bit of mutable
+                      data (a File) inside an otherwise immutable value (the SpiderRobot struct).
+                    * Rust offers several flavors of it; in this section, we’ll discuss
+                      the two most straightforward types: Cell<T> and RefCell<T>, both in the std::cell
+                      module.
+                      * A Cell<T> is a struct that contains a single private value of type T. The only special
+                        thing about a Cell is that you can get and set the field even if you don’t have mut
+                        access to the Cell itself:
+                        fn set(&self, value: T) // note: not `&mut self`
+                        this one unusual detail is the whole point of Cells.
+                      * Unlike Cell, RefCell supports borrowing refer‐
+                        ences to its T value:
+                        ref_cell.borrow()
+                        Returns a Ref<T>, which is essentially just a shared reference to the value stored
+                        in ref_cell.
+                        This method panics if the value is already mutably borrowed; see details to fol‐
+                        low.
+                        ref_cell.borrow_mut()
+                        Returns a RefMut<T>, essentially a mutable reference to the value in ref_cell.
+                        This method panics if the value is already borrowed; see details to follow.
+                        ref_cell.try_borrow(), ref_cell.try_borrow_mut()
+                        Work just like borrow() and borrow_mut(), but return a Result. Instead of pan‐
+                        icking if the value is already mutably borrowed, they return an Err value.
+                      * The only difference is that normally,
+                        when you borrow a reference to a variable, Rust checks at compile time to ensure that
+                        you’re using the reference safely. If the checks fail, you get a compiler error. RefCell
+                        enforces the same rule using run-time checks.
+                      * The other drawback is less obvious and more serious: cells—and any types
+                        that contain them—are not thread-safe.
+                        * Rust therefore will not allow multiple threads
+                          to access them at once.
     • You can “borrow a reference” to a value; references are non-owning pointers,
     with limited lifetimes.
     * moves
@@ -448,6 +512,7 @@
             }
             }
 1. traits, lifetimes
+    * memory for traits: fat pointer to trait object
     * Rust takes a fresh
       approach inspired by Haskell’s typeclasses.
       * Traits are Rust’s take on interfaces or abstract base classes.
@@ -956,236 +1021,56 @@
       #[cfg]:
       #[cfg(target_os = "android")]
     * #[inline]
-1. references, smart pointers: box
-    * mutability
-        * In Rust, &mut means exclusive access. Plain & means shared access.
-        * Iterating over a mut reference provides a mut reference to each element:
-            for rs in &mut strings { // the type of rs is &mut String
-            rs.push('\n'); // add a newline to each string
-            }
-        * let mut numbers = Vec::new();
-        Even though vectors are designed to be grown and shrunk dynamically,
-          we must still mark the variable mut for Rust to let us push numbers onto the end of it.
-        * Rust’s rules for mutation and sharing:
-          Shared access is read-only access.
-          Values borrowed by shared references are read-only. Across the lifetime of a
-          shared reference, neither its referent, nor anything reachable from that referent,
-          can be changed by anything. There exist no live mutable references to anything in
-          that structure, its owner is held read-only, and so on. It’s really frozen.
-          Mutable access is exclusive access.
-          A value borrowed by a mutable reference is reachable exclusively via that refer‐
-          ence. Across the lifetime of a mutable reference, there is no other usable path to
-          its referent or to any value reachable from there. The only references whose life‐
-          times may overlap with a mutable reference are those you borrow from the muta‐
-          ble reference itself.
-    * However, Rust also
-      includes two kinds of fat pointers, two-word values carrying the address of some
-      value, along with some further information necessary to put the value to use.
-      * A reference to a slice is a fat pointer, carrying the starting address of the slice and its
-        length.
-      * Rust’s other kind of fat pointer is a trait object, a reference to a value that implements
-        a certain trait.
-        * A trait object carries a value’s address and a pointer to the trait’s imple‐
-          mentation appropriate to that value, for invoking the trait’s methods.
-    * Rust permits references to references:
-        ```
-        struct Point { x: i32, y: i32 }
-        let point = Point { x: 1000, y: 729 };
-        let r: &Point = &point;
-        let rr: &&Point = &r;
-        let rrr: &&&Point = &rr;
-        ```
-        * Like the . operator, Rust’s comparison operators “see through” any number of refer‐
-          ences:
-          * the == operator follows all the references and performs
-            the comparison on their final targets, x and y.
-          * If you actually want to know
-            whether two references point to the same memory, you can use std::ptr::eq, which
-            compares them as addresses:
+
+## references
+* Rust’s basic pointer type
+    * example: reference to an i32 is a single machine word holding the address of the i32, which may be on the stack or in the heap
+* Rust tracks the ownership and lifetimes of values
+    * mistakes like dangling pointers, double frees, and pointer invalidation are ruled out at compile time
+* non-owning pointer
+    * let access a value without affecting its ownership
+    * no effect on their referents’ lifetimes
+* are never null
+* must never outlive their referents
+* two types: a way to enforce a multiple readers or single writer rule at compile time
+    * rule: either you can read and write the value, or it can be shared by any number of readers, but never both at the same time
+    * `&T`
+        * immutable, shared reference
+            * read but not modify its referent
+        * `x` has the type `T` => `&x` has the type `&T`
+        * in Rust terminology, we say that it borrows a reference to x
+        * are `Copy`
+            * we can have many shared references
+        * no mutable references along shared references
+            * modifying the value they point to is forbidden
+    * `&mut T`
+        * mutable, exclusive reference
+            * both read and modify
+        * `x` has the type `T` => `&mut x` has the type `&mut T`
+        * forbids any other references of any sort to that value active at the same time
+            * in particular: as long as there are shared references to a value, not even its owner can modify it
+        * are not `Copy` (makes no sense)
+        * iterating provides a mut reference to each element
+* permits references to references
+* `*` operator
+    * given a reference `r`, the expression `*r` refers to the value `r` points to
+    * is often omitted, because "dot" operator automatically references or dereferences its left argument
+* `.`
+    * implicitly dereferences its left operand
+    * can also implicitly borrow a reference to its left operand
+        * example: HashMap
             ```
-            assert!(rx == ry); // their referents are equal
-            assert!(!std::ptr::eq(rx, ry)); // but occupy different addresses
+            hash_map.insert("one", 1) // desugared into (&mut hashmap_wrapper).insert("one", 1);
+
+            // where fn insert(&mut self, key: K, value: V)
             ```
-          * Note that the operands of a comparison must have exactly the same type, including
-            the references:
-            assert!(rx == rrx); // error: type mismatch: `&i32` vs `&&i32`
-            assert!(rx == *rrx); // this is okay
-    * Rust references are never null.
-    * Rust won’t convert integers to references
-      (outside of unsafe code), so you can’t convert zero into a reference.
-    * But you might recall that, when we fixed the show function to take the table of artists
-      by reference instead of by value, we never had to use the * operator.
-      * Since references are so widely used in Rust, the . operator implicitly dereferences its
-        left operand
-      The . operator can also implicitly borrow a reference to its left operand, if needed for
-      a method call.
-    * When we pass a value to a function in a way that moves ownership of the value to the
-      function, we say that we have passed it by value.
-    * If we instead pass the function a ref‐
-      erence to the value, we say that we have passed the value by reference.
-    * The right way to handle this is to use references. A reference lets you access a value
-      without affecting its ownership.
-      * example with hashmap
-      * References come in two kinds:
-        • A shared reference lets you read but not modify its referent. However, you can
-        have as many shared references to a particular value at a time as you like. The
-        expression &e yields a shared reference to e’s value; if e has the type T, then &e has
-        the type &T, pronounced “ref T.” Shared references are Copy.
-        • If you have a mutable reference to a value, you may both read and modify the
-        value. However, you may not have any other references of any sort to that value
-        active at the same time. The expression &mut e yields a mutable reference to e’s
-        value; you write its type as &mut T, which is pronounced “ref mute T.” Mutable
-        references are not Copy.
-        * You can think of the distinction between shared and mutable references as a way to
-          enforce a multiple readers or single writer rule at compile time.
-          * In fact, this rule doesn’t
-            apply only to references; it covers the borrowed value’s owner as well.
-          * well. As long as there
-            are shared references to a value, not even its owner can modify it; the value is locked
-            down.
-          * Nobody can modify table while show is working with it.
-    * Rust also has non-owning pointer types called ref‐
-      erences, which have no effect on their referents’ lifetimes.
-      * references must never outlive their referents.
-      * You must
-        make it apparent in your code that no reference can possibly outlive the value it
-        points to.
-      * To emphasize this, Rust refers to creating a reference to some value as bor‐
-        rowing the value: what you have borrowed, you must eventually return to its owner.
-    * A reference-counting loop; these objects will not be freed
-        * It is possible to leak values in Rust this way, but such situations are rare. You cannot
-          create a cycle without, at some point, making an older value point to a newer value.
-          This obviously requires the older value to be mutable. Since Rc pointers hold their
-          referents immutable, it’s not normally possible to create a cycle.
-          * interior mutability
-            * If you com‐
-              bine those techniques with Rc pointers, you can create a cycle and leak memory.
-            * You can sometimes avoid creating cycles of Rc pointers by using weak pointers,
-              std::rc::Weak, for some of the links instead.
-            * What we need is a little bit of mutable
-              data (a File) inside an otherwise immutable value (the SpiderRobot struct).
-            * Rust offers several flavors of it; in this section, we’ll discuss
-              the two most straightforward types: Cell<T> and RefCell<T>, both in the std::cell
-              module.
-              * A Cell<T> is a struct that contains a single private value of type T. The only special
-                thing about a Cell is that you can get and set the field even if you don’t have mut
-                access to the Cell itself:
-                fn set(&self, value: T) // note: not `&mut self`
-                this one unusual detail is the whole point of Cells.
-              * Unlike Cell, RefCell supports borrowing refer‐
-                ences to its T value:
-                ref_cell.borrow()
-                Returns a Ref<T>, which is essentially just a shared reference to the value stored
-                in ref_cell.
-                This method panics if the value is already mutably borrowed; see details to fol‐
-                low.
-                ref_cell.borrow_mut()
-                Returns a RefMut<T>, essentially a mutable reference to the value in ref_cell.
-                This method panics if the value is already borrowed; see details to follow.
-                ref_cell.try_borrow(), ref_cell.try_borrow_mut()
-                Work just like borrow() and borrow_mut(), but return a Result. Instead of pan‐
-                icking if the value is already mutably borrowed, they return an Err value.
-              * The only difference is that normally,
-                when you borrow a reference to a variable, Rust checks at compile time to ensure that
-                you’re using the reference safely. If the checks fail, you get a compiler error. RefCell
-                enforces the same rule using run-time checks.
-              * The other drawback is less obvious and more serious: cells—and any types
-                that contain them—are not thread-safe.
-                * Rust therefore will not allow multiple threads
-                  to access them at once.
-    * Box<T>
-        * A Box<T> is a pointer to a
-          value of type T stored on the heap. Calling Box::new(v) allocates some heap space,
-          moves the value v into it, and returns a Box pointing to the heap space.
-
-    * fat pointers
-    * In
-      Java, if class Rectangle contains a field Vector2D upperLeft;, then upperLeft is a
-      reference to another separately created Vector2D object. Objects never physically
-      contain other objects in Java.
-    * References
-        * A value of type &String (pronounced “ref String”) is a reference to a String value, a
-          &i32 is a reference to an i32, and so on.
-        * It’s easiest to get started by thinking of references as Rust’s basic pointer type.
-        * At run
-          time, a reference to an i32 is a single machine word holding the address of the i32,
-          which may be on the stack or in the heap.
-        * The expression &x produces a reference to
-          x; in Rust terminology, we say that it borrows a reference to x.
-        * Given a reference r, the
-          expression *r refers to the value r points to.
-        * Unlike C pointers, however, Rust references are never null: there is simply no way to
-          produce a null reference in safe Rust.
-        * And unlike C, Rust tracks the ownership and
-          lifetimes of values, so mistakes like dangling pointers, double frees, and pointer inva‐
-          lidation are ruled out at compile time.
-        * Rust references come in two flavors:
-            * &T
-                * An immutable, shared reference.
-                * You can have many shared references to a given
-                  value at a time, but they are read-only: modifying the value they point to is for‐
-                  bidden, as with const T* in C.
-            * &mut T
-                * A mutable, exclusive reference.
-                * You can read and modify the value it points to, as
-                  with a T* in C.
-                * But for as long as the reference exists, you may not have any other
-                  references of any kind to that value.
-                * Rust uses this dichotomy between shared and mutable references to enforce a “single
-                  writer or multiple readers” rule: either you can read and write the value, or it can be
-                  shared by any number of readers, but never both at the same time.
-    * Boxes
-        * The simplest way to allocate a value in the heap is to use Box::new:
-        * When b goes
-          out of scope, the memory is freed immediately, unless b has been moved—by return‐
-          ing it, for example.
-            * let b = Box::new(t);
-        * Moves are essential to the way Rust handles heap-allocated values;
-    * Raw Pointers
-        * Rust also has the raw pointer types *mut T and *const T.
-        * Raw pointers really are just
-          like pointers in C++.
-        * Using a raw pointer is unsafe, because Rust makes no effort to
-          track what it points to.
-        * For example, raw pointers may be null, or they may point to
-          memory that has been freed or that now contains a value of a different type.
-        * However, you may only dereference raw pointers within an unsafe block.
-    * The types &[T] and &mut [T], called a shared slice of Ts and mutable slice of Ts, are
-      references to a series of elements that are a part of some other value, like an array
-      or vector.
-      * You can think of a slice as a pointer to its first element, together with a
-        count of the number of elements you can access starting at that point.
-
-    * std::mem::swap
-        fn swap<T>(x: &mut T, y: &mut T); // shorthand for -> ()
-        The standard
-        library’s std::mem::swap function has no meaningful return value; it just exchanges
-        the values of its two arguments.
-    * all you need to know is that &x borrows a reference to x, and
-      that *r is the value that the reference r refers to.
-    * What if Command / Query separation is the answer? When you run a command to change data, move the memory around (no reference &); when you run a query to read data, use references.
-        * When you create / insert into a data structure, you move the data in.
-        * Reading is referencing, removing is moving data out, updating is a mem::replace or swap; iteration is usually done with references.
-    * I pretty much never call clone() except on Rcs and Arcs
-    * returns a value referencing data owned by the current function
-        * How to return a reference to a value from Hashmap wrappered in Arc and Mutex in Rust?
-        ```
-        use std::sync::{Arc,Mutex};
-        use std::collections::HashMap;
-
-        struct Hey{
-            a:Arc<Mutex<HashMap<String, String>>>
-        }
-
-
-        impl Hey {
-            fn get(&self,key:&String)->&String{
-                self.a.lock().unwrap().get(key).unwrap() // compilation error: returns a value referencing data owned by the current function
-            }
-        }
-        ```
-        * If that return type were allowed to point inside the Mutex's data, there would be nothing stopping other code from locking the mutex and deleting the entry, meaning that the returned reference would point at something that was deallocated
-        * If it's allowed, the map might change due to the operation from another thread, and it's UB
+* pass by value vs pass by reference
+    * pass by value = pass a value to a function in a way that moves ownership of the value to the function
+    * pass by reference = pass the function a reference to the value
+* lifetime
+    * You must
+      make it apparent in your code that no reference can possibly outlive the value it
+      points to.
     * Cannot return reference to temporary value
         ```
         struct MyStruct {
@@ -1200,34 +1085,36 @@
             &my_struct // Error: Cannot return reference to temporary value
         }
         ```
-    * Box, ref, & and *
-    * Box is a library-defined smart pointer type; ref is a syntax for pattern matching; & is a reference operator, doubling as a sigil in reference types; * is a dereference operator, doubling as a sigil in raw pointer types
-    * references and raw pointers:
-        &T        - immutable (shared) reference
-        &mut T    - mutable (exclusive) reference
-
-        *const T  - immutable raw pointer
-        *mut T    - mutable raw pointer
-        * The difference between the last two is very thin, because either can be cast to another without any restrictions, so const/mut distinction there serves mostly as a lint.
-        * Naturally, this is not so for references - reference types and their interaction define one of the key feature of Rust: borrowing.
-            * References have a lot of restrictions on how and when they could be created, how they could be used and how they interact with each other. In return, they can be used without unsafe blocks.
-    * The dereference operator is often omitted, because another operator, the "dot" operator (i.e., .), automatically references or dereferences its left argument.
+* fat pointers
+    * structure which contains
+        * the actual pointer to the piece of data
+        * and some additional information (length for slices, pointer to vtable for trait objects)
+* raw pointer
+    * kinds
+        * `*mut T` - mutable raw pointer
+        * `*const T` - immutable raw pointer
+        * either can be cast to another without any restrictions
+            * distinction there serves mostly as a lint
+    * just like pointers in C++
+    * unsafe
+        * Rust makes no effort to track what it points to
+    * may be null, may point to memory that now contains a value of a different type etc
+    * dereference only within an unsafe block
+*` Box<T>`
+    * simplest way to allocate a value in the heap
+    * `Box::new(v)` allocates some heap space, moves the value v into it, and returns a `Box` pointing to the heap space
+    * if goes out of scope, the memory is freed immediately
+* CQRS
+    * command
+        * when you create / insert into a data structure, you move the data in (not reference &)
+        * when you run a command to change data, move the memory around (no reference &)
+    * query
+        * use references
+    * example: `HashMap`
         ```
-        struct X { n: u32 };
-
-        impl X {
-            fn method(&self) -> u32 { self.n } // self.n automatically dereferences it, so you won't have to type (*self).n
-        }
+        fn insert(&mut self, key: K, value: V) // command
+        fn get(&self, key: &K) -> Option<&V> // query
         ```
-    * compiler automatically references x in x.method(), so you won't have to write (&x).method()
-        ```
-        let x = X { n: 12 };
-        let n = x.method();
-        ```
-    * A fat pointer is basically a structure which contains the actual pointer to the piece of data and some additional information (length for slices, pointer to vtable for trait objects)
-        * However, only a pointer is not enough - additional information is needed, for example, length for slices or a pointer to a virtual methods table for trait objects.
-        * This information is "embedded" in pointers to unsized types, making these pointers "fat".
-
 
 ## pattern matching
 * can be thought of as a generalization of the switch statement
