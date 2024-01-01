@@ -23,6 +23,7 @@
     * https://rustjobs.dev/blog/difference-between-string-and-str-in-rust/
     * https://doc.rust-lang.org/std
     * https://users.rust-lang.org/t/whats-the-difference-between-string-and-str/10177/2
+    * http://xion.io/post/code/rust-patterns-ref.html
 
 1. general
     * allocates on stack by default
@@ -227,6 +228,47 @@
         * In addition to functions, types, and nested modules, modules can also define con‐
           stants and statics.
 1. structs
+    * enums
+        * memory
+            * tag + enough memory to hold all fields of the largest variant
+                * example
+                    ```
+                    let circle = Shape::Circle(5.0);
+                    let rectangle = Shape::Rectangle(3.0, 4.0);
+                    let triangle = Shape::Triangle(1.0, 1.0, 1.0);
+
+                    Circle(5.0):
+                    +---------------------------+
+                    |       Variant Tag         |
+                    +---------------------------+
+                    |   Associated Data (f64)   |
+                    |                           |
+                    |                           |
+                    +---------------------------+
+
+                    Rectangle(3.0, 4.0):
+                    +---------------------------+
+                    |       Variant Tag         |
+                    +---------------------------+
+                    |   Associated Data (f64)   |
+                    |   Associated Data (f64)   |
+                    |                           |
+                    +---------------------------+
+
+                    Triangle(1.0, 1.0, 1.0):
+                    +---------------------------+
+                    |       Variant Tag         |
+                    +---------------------------+
+                    |   Associated Data (f64)   |
+                    |   Associated Data (f64)   |
+                    |   Associated Data (f64)   |
+                    +---------------------------+
+                    ```
+            * tag field is for Rust’s internal use
+                * tells which constructor created the value and therefore which fields it has.
+        * useful for quickly implementing tree-like data structures
+        * can have methods
+        * rust prohibits match expressions that do not cover all possible values
     * Rust has three kinds of struct types, named-field, tuple-like, and unit-like,
         * named
             struct GrayscaleMap {
@@ -906,6 +948,14 @@
         .then(a.path.cmp(&b.path)) // compare paths to break ties
         }
 1. cargo
+1. attributes
+    * You
+      can disable the warning by adding an #[allow] attribute on the type:
+      #[allow(non_camel_case_types)]
+    * Conditional compilation is another feature that’s written using an attribute, namely,
+      #[cfg]:
+      #[cfg(target_os = "android")]
+    * #[inline]
 1. references, smart pointers: box
     * mutability
         * In Rust, &mut means exclusive access. Plain & means shared access.
@@ -1178,78 +1228,54 @@
         * However, only a pointer is not enough - additional information is needed, for example, length for slices or a pointer to a virtual methods table for trait objects.
         * This information is "embedded" in pointers to unsized types, making these pointers "fat".
 
-1. pattern matching
-    * enums
-        * In memory, enums with data are stored as a small integer tag, plus enough memory
-          to hold all the fields of the largest variant.
-        * The tag field is for Rust’s internal use. It
-          tells which constructor created the value and therefore which fields it has.
-        * Enums are also useful for quickly implementing tree-like data structures.
-    * Enums can have methods, just like structs:
-    * Rust prohibits match expressions that do not cover all possible values:
-    * borrow of references
-        match account {
-        Account { name, language, .. } => {
-        ui.greet(&name, &language);
-        ui.show_settings(&account); // error: borrow of moved value: `account`
-        }
-        }
-        Here, the fields account.name and account.language are moved into local variables
-        name and language. The rest of account is dropped. That’s why we can’t borrow a ref‐
-        erence to it afterward.
-        We need a kind of pattern that borrows matched values instead of moving them.
-        match account {
-        Account { ref name, ref language, .. } => { // You can use ref mut to borrow mut references:
-        ui.greet(name, language);
-        ui.show_settings(&account); // ok
-        }
-        }
-        In a
-        pattern, & matches a reference.
-        match sphere.center() { // sphere.center() returns ref
-        &Point3d { x, y, z } => ...
-        }
-        When we match &Point3d { x, y, z }, the
-        variables x, y, and z receive copies of the coordinates, leaving the original Point3d
-        value intact. It works because those fields are copyable. If we try the same thing on a
-        struct with noncopyable fields, we’ll get an error:
-        match friend.borrow_car() {
-        Some(&Car { engine, .. }) => // error: can't move out of borrow
-        ...
-        None => {}
-        }
-        You can
-        use a ref pattern to borrow a reference to a part. You just don’t own it:
-        Some(&Car { ref engine, .. }) => // ok, engine is a reference
 
-        * But Rust also provides match guards, extra conditions that must be true in order for a
-        match arm to apply, written as if CONDITION,
-        match point_to_hex(click) {
-        None => Err("That's not a game space."),
-        Some(hex) if hex == current_hex =>
-        Err("You are already there! You must click somewhere else"),
-        Some(hex) => Ok(hex)
+## pattern matching
+* can be thought of as a generalization of the switch statement
+    * comparing objects not just by value (or overloaded equality operator, etc.) but by structure
+* example
+    ```
+    let example_enum: MyEnum = ...
+    match example_enum {
+        MyEnum::VariantA(value) => ...
+        MyEnum::VariantC { name, age } if age >= 18 => ... // match guard
+        MyEnum::VariantC { name, age } => ...
+    }
+    ```
+* problem: move when we want borrow
+    * example
+        ```
+        let query_params: Vec<(String, String)> = vec![("page".to_string(), "1".to_string())]
+
+        for &(name, value) in &query_params { // compilation error: cannot move out of a shared reference - type of name and value is String
+            println!("{}={}", name, value);
         }
-        * Matching Multiple Possibilities
-            * The vertical bar (|) can be used to combine several patterns in a single match arm:
-        * Binding with @ Patterns
-            * Finally, x @ pattern matches exactly like the given pattern, but on success, instead
-              of creating variables for parts of the matched value, it creates a single variable x and
-              moves or copies the whole value into it.
-              rect @ Shape::Rect(..) => {
-              optimized_paint(&rect)
-              }
-
-
-1. attributes
-    * You
-      can disable the warning by adding an #[allow] attribute on the type:
-      #[allow(non_camel_case_types)]
-    * Conditional compilation is another feature that’s written using an attribute, namely,
-      #[cfg]:
-      #[cfg(target_os = "android")]
-    * #[inline]
-
+        ```
+        * reason: attempt to move those items into the loop scope
+            * however due to the way the vector is iterated over (&query_params), we’re only borrowing each item
+    * solution: `ref` pattern
+        ```
+        for &(ref name, ref value) in &query_params { ... }
+        ```
+        * note that we cannot use `for &(&name, &value)`
+        * how parts of the matched value are captured by the pattern’s bindings:
+            * without `ref`: they are moved into the match arms
+            * with `ref`: they are borrowed instead and represented as references
+    * `&` vs `ref`
+        * `&` denotes that your pattern expects a reference to an object
+            * part of the pattern
+            * `&Foo` matches different objects than `Foo` does
+            * Rust compiler knows we’re looking for references to certain objects, and not for the objects themselves
+        * `ref` indicates that you want a reference to an unpacked value
+            * annotates pattern bindings to make them borrow rather than move
+            * not part of the pattern
+            * `Foo(ref foo)` matches the same objects as `Foo(foo)`
+        * why distinction is important?
+            * in other places Rust is perfectly happy to blur the gap between references and actual objects
+                * example: calling most of their methods
+            * pattern matching is destructive operation
+                * anything we apply match (or similar construct) to will be moved into the block by default
+                * will prevent any subsequent moves and essentially consume the value
+* `|` can be used to combine several patterns in a single match arm
 
 ## String vs !str vs str
 * UTF-8
