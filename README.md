@@ -959,29 +959,19 @@
             * any owned data always passes a 'static lifetime bound, but a reference to that owned data generally does not
                 * reason: owned data is self-contained and needn’t be dropped before any particular variable goes out of scope
                 * example
-                    | Code 1 | Code 2 |
-                    | ------ | ------ |
-                    | ```rust
-                    fn test<T: 'static>(t: T) {}
-                    fn main() {
-                        let s1 = String::from("s2");
-                        {
-                            let s2 = String::from("s2");
-                            test(s2);
-                        }
-                        test(s1);
-                    }
-                    ``` | ```rust
-                    fn test<T>(t: &'static T) {}
-                    fn main() {
-                        let s1 = String::from("s1");
-                        {
-                            let s2 = String::from("s2");
-                            test(&s2);
-                        }
-                        test(&s1);
-                    }
-                    ``` |
+                  | Code 1                                                         | Code 2                                                         |
+                  | -------------------------------------------------------------- | -------------------------------------------------------------- |
+                  | ```rust                                                        | ```rust                                                        |
+                  | fn test<T: 'static>(t: T) {}                                   | fn test<T>(t: &'static T) {}                                   |
+                  | fn main() {                                                    | fn main() {                                                     |
+                  |     let s1 = String::from("s2");                               |     let s1 = String::from("s1");                               |
+                  |     {                                                          |     {                                                            |
+                  |         let s2 = String::from("s2");                           |         let s2 = String::from("s2");                           |
+                  |         test(s2);                                              |         test(&s2);                                             |
+                  |     }                                                          |     }                                                            |
+                  |     test(s1);                                                  |     test(&s1);                                                 |
+                  | }                                                              | }                                                              |
+
     * is a proof that no reference can possibly outlive the value it points to
         * examples
             * cannot return reference to temporary value
