@@ -24,6 +24,8 @@
     * https://doc.rust-lang.org/std
     * https://users.rust-lang.org/t/whats-the-difference-between-string-and-str/10177/2
     * http://xion.io/post/code/rust-patterns-ref.html
+    * https://github.com/pretzelhammer/rust-blog/blob/master/posts/common-rust-lifetime-misconceptions.md
+    * https://www.cs.brandeis.edu/~cs146a/rust/doc-02-21-2015/book/static-and-dynamic-dispatch.html
 
 1. general
     * allocates on stack by default
@@ -511,101 +513,111 @@
             schedule_weather_retry();
             }
             }
-1. traits
-    * memory for traits: fat pointer to trait object
-    * Rust takes a fresh
-      approach inspired by Haskell’s typeclasses.
-      * Traits are Rust’s take on interfaces or abstract base classes.
-    * We’ll use them
-      to add extension methods to existing types, even built-in types like str and bool.
-    * So we’ll also talk about how &mut
-      dyn Write and <T: Write> are similar, how they’re different, and how to choose
-      between these two ways of using traits.
-    * Rust has this rule because, as we’ll see later in this chapter, you can use traits to add
-      new methods to any type—even standard library types like u32 and str.
-      * use std::io::Write; // the trait itself must be in scope.
-    * There are two ways of using traits to write polymorphic code in Rust: trait objects and
-      generics.
-      * let writer: dyn Write = buf; // error: `Write` does not have a constant size
-        * A variable’s size has to be known at compile time, and types that implement Write
-          can be any size.
-        * let mut buf: Vec<u8> = vec![];
-          let writer: &mut dyn Write = &mut buf; // ok, references are explicit:
-    * In memory, a trait object is a fat pointer consisting of a pointer to the value, plus a
-      pointer to a table representing that value’s type.
-      * C++ has this kind of run-time type information as well. It’s called a virtual table, or
-        vtable. In Rust, as in C++, the vtable is generated once, at compile time, and shared by
-        all objects of the same type.
-    * Rust automatically converts ordinary references into trait objects when needed.
-        * Likewise, Rust will happily convert a Box<File> to a Box<dyn Write>
-        * What the compiler is
-          actually doing here is very simple. At the point where the conversion happens, Rust
-          knows the referent’s true type (in this case, File), so it just adds the address of the
-          appropriate vtable, turning the regular pointer into a fat pointer.
-    * extension methods
-        * Rust lets you implement any trait on any type, as long as either the trait or the type is
-          introduced in the current crate.
-        * trait IsEmoji {
-          fn is_emoji(&self) -> bool;
-          }
-          /// Implement IsEmoji for the built-in character type.
-          impl IsEmoji for char {
-          fn is_emoji(&self) -> bool {
-          ...
-          }
-          }
-        * Implementing the trait for all writers makes it an extension trait, adding a method to
-          all Rust writers:
-          impl<W: Write> WriteHtml for W
-        * We said earlier that when you implement a trait, either the trait or the type must be
-          new in the current crate.
-          * This is called the orphan rule.
-          * Your code can’t impl Write for u8, because both
-            Write and u8 are defined in the standard library.
-        * A trait can use the keyword Self as a type.
-            pub trait Clone {
-            fn clone(&self) -> Self;
-            ...
+1. cargo
+1. attributes
+    * You
+      can disable the warning by adding an #[allow] attribute on the type:
+      #[allow(non_camel_case_types)]
+    * Conditional compilation is another feature that’s written using an attribute, namely,
+      #[cfg]:
+      #[cfg(target_os = "android")]
+    * #[inline]
+
+## traits
+* Rust’s take on interfaces
+    * approach inspired by Haskell’s typeclasses
+    * dispatch
+        * mechanism to determine which specific version is actually run
+        * static
+            * not something Go or Java have
+            * perform using monomorphization
+                * example
+                    ```
+                    impl Foo for u8 { ... }
+                    impl Foo for String { ... }
+
+                    fn do_something<T: Foo>(x: T) { ... } // compiler will create a special version for both u8 and String, and then replace the call sites
+                    // fn some_function(foo: impl Trait) { ... } // equivalent to above, can be handy when one type for param
+
+                    fn main() {
+                        let x = 5u8;
+                        let y = "Hello".to_string();
+
+                        do_something(x);
+                        do_something(y);
+                    }
+                    ```
+                * upsides: allowing for inlining and hence usually higher performance
+                * downsides: code bloat due to many copies of the same function existing in the binary, one for each type
+        * dynamic
+            * provided through a feature called trait objects
+                * trait objects are normal values that store a value of any type that implements the given trait
+                    * type can only be known at runtime
+                    * example: `&Foo` or `Box<Foo>`
+            * upsides: less code bloat (trait object is not specialised to each of the types)
+            * downsides
+                * slower virtual function calls
+                * inhibiting any chance of inlining and related optimisations
+* used to add extensions methods to existing types (even built-in like str and bool)
+    * example
+        ```
+        impl<W: Write> WriteHtml for W { ... } // extension trait for Write trait
+
+        impl IsBlank for str { // adds is_blank() method for String and &str
+            fn is_blank(&self) -> bool {
+                self.trim().is_empty()
             }
-            * Using Self as the return type here means that the type of x.clone() is the same as
-              the type of x, whatever that might be.
-            * If x is a String, then the type of x.clone() is
-              String—not dyn Clone or any other cloneable type.
-            * A trait that uses the Self type is incompatible with trait objects:
-                // error: the trait `Spliceable` cannot be made into an object
-                fn splice_anything(left: &dyn Spliceable, right: &dyn Spliceable) {
-                let combo = left.splice(right); // Rust has no way to know at compile time if left and right will be the
-                                                   same type, as required.
-                // ...
+        }
+        ```
+    * the trait itself must be in scope
+* memory: fat pointer
+    * pointer to the value
+    * pointer to a table (vtable) corresponding to the specific implementation of T
+        * vtable is essentially a struct of function pointers, pointing to the concrete piece of machine code for each method in the implementation
+        * example: `trait_object.method()` will retrieve the correct pointer out of the vtable and then do a dynamic call of it
+    * rust automatically converts ordinary references into trait objects when needed
+        * example: `Box<File>` to a `Box<dyn Write>`
+        * how?
+            * Rust knows the referent’s true type , so it just adds the address of the
+            appropriate vtable, turning the regular pointer into a fat pointer
+* orphan rule
+    * when implementing a trait, either the trait or the type must be new in the current crate
+    * example: can't `impl Write for u8`
+        * both are defined in the standard library.
+* `Self` type represents the concrete type implementing that trait
+    * example
+        ```
+        pub trait Clone {
+            fn clone(&self) -> Self; // type of `x.clone()` is the same as the type of `x`
+        }
+        ```
+* two ways of using traits to write polymorphic code
+    * trait objects
+    * generics
+* `impl Trait` can be used in two locations
+    * as an argument type
+
+    * as a return type, but concrete type needs to be known at compile time
+        * concrete types of iterators could become very complex
+            ```
+            fn women_vip<'a>(persons: &'a Vec<Person>) -> impl Iterator<Item = &'a Person> + 'a { // instead of Filter<Iter<'_, Person>, fn(&&'a Person) -> bool>
+                persons.iter().filter(|p| p.is_woman())
+            }
+            ```
+        * problem: trait types are unsized and don't have a fixed size known at compile time
+            * reason: compiler has to know the type being returned from the function at compile time in order to allocate the right amount of space on the stack
+            * example
+                ```
+                fn make_shape(shape_type: ShapeType) -> impl Shape { // does not compile as we may return Circle, Triangle etc
+                    match shape_type {
+                        ShapeType::Circle => Circle::new(),
+                        ShapeType::Triangle => Triangle::new(),
+                        ShapeType::Rectangle => Rectangle::new(),
+                    }
                 }
-            * more
-              advanced features of traits are useful, but they can’t coexist with trait objects because
-              with trait objects, you lose the type information Rust needs to type-check your
-              program.
-        * We can declare that a trait is an extension of another trait:
-            trait Creature: Visible
-            In fact, Rust’s subtraits are really just a shorthand for a bound on Self.
-            trait Creature where Self: Visible
-        * impl Trait
-            * Rust has a feature called impl Trait designed for precisely this situation.
-            * allows us to “erase” the type of a return value, specifying only the trait or traits it
-              implements, without dynamic dispatch or a heap allocation:
-              fn cyclical_zip(v: Vec<u8>, u: Vec<u8>) -> impl Iterator<Item=u8> {
-              v.into_iter().chain(u.into_iter()).cycle()
-              }
-            * impl
-              Trait is a form of static dispatch, so the compiler has to know the type being
-              returned from the function at compile time in order to allocate the right amount of
-              space on the stack and correctly access fields and methods on that type.
-              fn make_shape(shape: &str) -> impl Shape {
-              match shape {
-              "circle" => Circle::new(),
-              "triangle" => Triangle::new(), // error: incompatible types
-              "shape" => Rectangle::new(),
-              }
-              }
-              * should use Box or use enum
-    * utility traits
+                ```
+            * solution: box it
+    * useful traits
         * Any type that implements the
             FromStr trait has a from_str method that tries to parse a value of that type from a
             string
@@ -779,23 +791,6 @@
                 * The #[derive(Debug)] attribute tells the compiler to generate some extra code that
                   allows us to format the Arguments struct with {:?} in println!.
     * macros (derev)
-    * static dispatch
-        * Static dispatch is not something Go or Java have.
-        * equivalent
-            * fn some_function<T: Trait>(foo: T) { … }
-            * fn some_function(foo: impl Trait) { … }
-    * dynamic dispatch
-        * As dynamic dispatch must work on objects which might not be Sized, you need a reference to use it. That is, you would use &dyn Trait or Box<dyn Trait> (note: for historical reasons, the dyn keyword is not required, but modern Rust uses it).
-        * Box<dyn Trait> is just sugar for Box<dyn Trait + 'static>
-1. cargo
-1. attributes
-    * You
-      can disable the warning by adding an #[allow] attribute on the type:
-      #[allow(non_camel_case_types)]
-    * Conditional compilation is another feature that’s written using an attribute, namely,
-      #[cfg]:
-      #[cfg(target_os = "android")]
-    * #[inline]
 
 ## closures
 * closure may contain data
@@ -923,17 +918,15 @@
     * pass by reference = pass the function a reference to the value
 * lifetime
     * used by borrow checker to determine how long references should be valid
-    * variable's lifetime begins when it is created and ends when it is destroyed
-    * is a construct the compiler uses to ensure all borrows are valid
-        * proof that no reference can possibly outlive the value it points to
-            * example: cannot return reference to temporary value
-                ```
-                fn create_struct<'a>() -> &'a MyStruct {
-                    let tmp = String::from("Hello, Rust!");
+        * example: cannot return reference to temporary value
+            ```
+            fn create_struct<'a>() -> &'a MyStruct {
+                let tmp = String::from("Hello, Rust!");
 
-                    &tmp // Error: Cannot return reference to temporary value
-                }
-                ```
+                &tmp // Error: Cannot return reference to temporary value
+            }
+            ```
+    * variable's lifetime begins when it is created and ends when it is destroyed
     * facilitates reasoning
         * example: function with a signature `go(p: &str))` cannot stash its argument anywhere that will outlive the call
     * are used in two different ways
@@ -941,6 +934,7 @@
             * means "reference points at a value of type T that is valid for at least the lifetime 'a"
         * lifetime bound: `U: 'a`
             * means "all references in T must outlive lifetime 'a"
+            * observation: `T: 'a` includes all `&'a T`
         * `'static`
             * indicates that the data pointed to by the reference lives for the remaining lifetime of the running program
                 * rather limiting
@@ -948,31 +942,45 @@
                     struct S {
                         r: &'static i32 // r can only refer to i32 values that will last for the lifetime of the program
                     }
-
-                    * This says that r can only refer to i32 values that will last for the lifetime of the pro‐
-                      gram, which is rather limiting.
-
-                      * Most are simply 'static, meaning that values of
-                        those types can live for as long as you like; for example, a Vec<i32> is self-contained
-                        and needn’t be dropped before any particular variable goes out of scope.
+                    ```
+                * example of `T` that can be short lived and long lived
+                    ```
+                    struct MyStruct<'a> {
+                        data: &'a str,
+                    }
+                    fn main() {
+                        {
+                            let data = String::from("Short lived data"); // not static
+                            let slice = &short_lived_data; // not static
+                            let struct = MyStruct { data: short_lived_slice }; // not static as not all references are static
+                            thread::spawn(move || { struct; }); // cannot be moved, otherwise outlive data
+                        }
+                        {
+                            let data = "Long lived data"; // &'static str
+                            let struct = MyStruct { data: long_lived_data }; // MyStruct<'static> as all references are
+                            thread::spawn(move || { struct; }); // can be moved as it lives long enough
+                        }
+                    }
                     ```
             * any owned data always passes a 'static lifetime bound, but a reference to that owned data generally does not
                 * reason: owned data is self-contained and needn’t be dropped before any particular variable goes out of scope
+                    * `'static` should really be renamed `'unbounded`
                 * example
-                  | Code 1                                                         | Code 2                                                         |
-                  | -------------------------------------------------------------- | -------------------------------------------------------------- |
-                  | ```                                                            | ```                                                        |
-                  | fn test<T: 'static>(t: T) {}                                   | fn test<T>(t: &'static T) {}                                   |
-                  | fn main() {                                                    | fn main() {                                                     |
-                  |     let s1 = String::from("s2");                               |     let s1 = String::from("s1");                               |
-                  |     {                                                          |     {                                                            |
-                  |         let s2 = String::from("s2");                           |         let s2 = String::from("s2");                           |
-                  |         test(s2);                                              |         test(&s2);                                             |
-                  |     }                                                          |     }                                                            |
-                  |     test(s1);                                                  |     test(&s1);                                                 |
-                  | }                                                              |                                                 |
-                  |```                                                             |   ```                                              |
+                    ```
+                    fn test_bound<T: 'static>(t: T) {}
+                    fn test_ref<T>(t: &'static T) {}
 
+                    fn main() {
+                        let s1 = String::from("s2"); // not static
+                        {
+                            let s2 = String::from("s2"); // not static
+                            test_bound(s2); // passes the 'static bound check
+                            test_ref(&s2); // borrowed value does not live long enough
+                        }
+                        test_bound(s1); // passes the 'static bound check
+                        test_ref(&s1); // borrowed value does not live long enough
+                    }
+                    ```
     * is a proof that no reference can possibly outlive the value it points to
         * examples
             * cannot return reference to temporary value
@@ -987,7 +995,6 @@
             * reference stored in some data structure must enclose that of the data structure
     * entirely compile-time
         * at run time, a reference is nothing but an address
-    * is part of type and has no run-time representation
     * every type in Rust has a lifetime
     * function signatures with lifetimes have a few constraints:
         * any reference must have an annotated lifetime.
@@ -1014,83 +1021,6 @@
                     ```
                     fn get_str() -> &str;                                   // ILLEGAL
                     ```
-    1. 'static
-        * the parameter type `T` may not live long enough
-            ```
-            fn test<T:Sync+Send>(a:Arc<RwLock<T>>){
-                let b = a.clone();
-                thread::spawn(move||{b;}); // compiler error: the parameter type `T` may not live long enough
-            }
-            ```
-            * T could still borrow something which could have a short lifetime so that's why spawn require 'static bound which means that everything is owned. Adding 'static bound to T should solve the issue.
-            * 'static has two different meanings, depending on where it's used.
-
-              In a reference, it means "lives for the rest of the program" while, in a type bound, it means the broader "lives however long I need it to" that encompasses both 'static references and owned values.
-
-              (Technically, they're the same "lives as long as I need it to" meaning... there's just no way for a reference to extend the lifetime of the memory backing it.)
-            * We could say it as, 'static means you have an infinite lease or indeed it can be kept around as long as you'd like.
-            * 'static should really be renamed 'unbounded
-            * A 'static bound on a type means that anything inside that types is 'static or owned, beacuse owned values by definition will live due to being owned.
-        * https://github.com/pretzelhammer/rust-blog/blob/master/posts/common-rust-lifetime-misconceptions.md#2-if-t-static-then-t-must-be-valid-for-the-entire-program
-        * It is confusing. 'static could live for the lifetime of the program. Something on the heap could live that long if never freed. I found it best to think of 'static as meaning not on the stack.
-        * example
-            ```
-            use std::sync::{Arc, RwLock};
-            use std::thread;
-
-            fn test<T>(data: Arc<RwLock<T>>)
-            where
-                T: 'static + Send + Sync,
-            {
-                // Spawn a worker thread
-                let handle = thread::spawn(move || {
-                    // Access the data inside the RwLock
-                    let read_guard = data.read().unwrap();
-                    println!("Worker Thread: Value inside RwLock: {:?}", *read_guard);
-                });
-
-                // Wait for the worker thread to finish
-                handle.join().unwrap();
-            }
-
-            fn main() {
-                let x = 42; // Some data, in this case, an integer
-
-                // Create an Arc containing an RwLock with a reference to the data
-                let shared_data = Arc::new(RwLock::new(x));
-
-                // Call the test function with the shared data
-                test(shared_data);
-
-                // At this point, shared_data, including the RwLock and the data, still exists.
-                // It will be deallocated when it goes out of scope or when the program ends.
-            }
-            ```
-            * let x = 0; allocates an integer on the stack with the value 0.
-              test(Arc::new(RwLock::new(&x))); creates an Arc (atomic reference counting) and an RwLock wrapping a reference to x. The Arc ensures that the reference count of the data it wraps is incremented.
-              Thread 1:
-              foo returns, and the local variable x goes out of scope.
-              The reference count of the Arc is still greater than zero because it is owned by the RwLock and passed to test. Therefore, the memory is not deallocated.
-              Thread 2:
-              test spawns Thread 2, which will operate on the shared data inside the RwLock.
-              If Thread 2 attempts to access x after Thread 1 has returned, it may encounter a use-after-free error because x is no longer in scope in Thread 1.
-              Potential Issue:
-              If Thread 2 attempts to access x after Thread 1 has returned, it might access a memory location that is no longer valid because x has gone out of scope.
-              This is a classic example of a lifetime issue and can lead to undefined behavior, crashes, or data corruption.
-              Solution:
-              To prevent this issue, the T: 'static bound is used. It enforces that the data wrapped by the Arc must have the 'static lifetime, meaning it lives for the entire duration of the program.
-              If you have data with a shorter lifetime, like a local variable in a function (x in this case), you need to ensure that it outlives all the threads that may access it.
-            * T could still internally borrow something, and that thing could exist for less than the theoretical max life time of the thread you’re spawning (up to the end of the program). Add a + ‘static toT bound or use thread::scope, whichever one is more manageable.\
-        * example
-            ```
-            fn main() {
-                { // // this block has lifetime 'a
-                    let t = 3;
-                    let r = &t;
-                    let a = Arc::new(RwLock::new(r)); // not compile:  borrowed value does not live long enough
-                    test(a);
-                } // `t` dropped here while still borrowed
-            ```
 * fat pointers
     * structure which contains
         * the actual pointer to the piece of data
