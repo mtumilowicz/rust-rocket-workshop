@@ -185,7 +185,7 @@
             d = gcd(d, m); // takes ownership
         }
         ```
-1. crate, cargo, modules
+1. cargo
     * Cargo.lock
         * The first time you build a
           project, Cargo outputs a Cargo.lock file that records the exact version of every crate it
@@ -511,7 +511,7 @@
             schedule_weather_retry();
             }
             }
-1. traits, lifetimes
+1. traits
     * memory for traits: fat pointer to trait object
     * Rust takes a fresh
       approach inspired by Haskell’s typeclasses.
@@ -605,48 +605,6 @@
               }
               }
               * should use Box or use enum
-    * lifetime
-        * Rust tries to assign each reference type in your program a lifetime that meets the con‐
-          straints imposed by how it is used.
-        * A lifetime is some stretch of your program for
-          which a reference could be safe to use: a statement, an expression, the scope of some
-          variable, or the like.
-        * Lifetimes are entirely figments of Rust’s compile-time imagina‐
-          tion.
-            * At run time, a reference is nothing but an address; its lifetime is part of its type
-              and has no run-time representation.
-        * example
-            ```
-            let v = vec![1, 2, 3];
-            let r = &v[1];
-            ```
-            max limit: the lifetime of v must enclose that
-            of the reference type of &v[1]
-            min limit: if you store a reference in some data struc‐
-            ture, its lifetime must enclose that of the data structure
-        * Conversely, if we do see a function with a signature like g(p: &i32) (or with the life‐
-          times written out, g<'a>(p: &'a i32)), we can tell that it does not stash its argument
-          p anywhere that will outlive the call.
-        * When a func‐
-          tion takes a single reference as an argument and returns a single reference, Rust
-          assumes that the two must have the same lifetime.
-          * fn smallest<'a>(v: &'a [i32]) -> &'a i32 { ... }
-        * This says that r can only refer to i32 values that will last for the lifetime of the pro‐
-          gram, which is rather limiting.
-            struct S {
-            r: &'static i32
-            }
-        * Every type in Rust has a
-          lifetime, including i32 and String.
-          * Most are simply 'static, meaning that values of
-            those types can live for as long as you like; for example, a Vec<i32> is self-contained
-            and needn’t be dropped before any particular variable goes out of scope.
-          * But a type
-            like Vec<&'a i32> has a lifetime that must be enclosed by 'a: it must be dropped
-            while its referents are still alive.
-    * lifetime elision
-        * In the simplest cases, you may never need to write out lifetimes for your parameters.
-          Rust just assigns a distinct lifetime to each spot that needs one.
     * utility traits
         * Any type that implements the
             FromStr trait has a from_str method that tries to parse a value of that type from a
@@ -829,120 +787,6 @@
     * dynamic dispatch
         * As dynamic dispatch must work on objects which might not be Sized, you need a reference to use it. That is, you would use &dyn Trait or Box<dyn Trait> (note: for historical reasons, the dyn keyword is not required, but modern Rust uses it).
         * Box<dyn Trait> is just sugar for Box<dyn Trait + 'static>
-1. 'static
-    * the parameter type `T` may not live long enough
-        ```
-        fn test<T:Sync+Send>(a:Arc<RwLock<T>>){
-            let b = a.clone();
-            thread::spawn(move||{b;}); // compiler error: the parameter type `T` may not live long enough
-        }
-        ```
-        * T could still borrow something which could have a short lifetime so that's why spawn require 'static bound which means that everything is owned. Adding 'static bound to T should solve the issue.
-        * 'static has two different meanings, depending on where it's used.
-
-          In a reference, it means "lives for the rest of the program" while, in a type bound, it means the broader "lives however long I need it to" that encompasses both 'static references and owned values.
-
-          (Technically, they're the same "lives as long as I need it to" meaning... there's just no way for a reference to extend the lifetime of the memory backing it.)
-        * We could say it as, 'static means you have an infinite lease or indeed it can be kept around as long as you'd like.
-        * 'static should really be renamed 'unbounded
-        * A 'static bound on a type means that anything inside that types is 'static or owned, beacuse owned values by definition will live due to being owned.
-    * https://github.com/pretzelhammer/rust-blog/blob/master/posts/common-rust-lifetime-misconceptions.md#2-if-t-static-then-t-must-be-valid-for-the-entire-program
-    * It is confusing. 'static could live for the lifetime of the program. Something on the heap could live that long if never freed. I found it best to think of 'static as meaning not on the stack.
-    * Lieftime parameters are used in two different ways in the language, with different but related meaning:
-
-      As a Reference Parameter: &'a T means "this reference points at a value of type T which is known through that reference to be valid for at least the lifetime 'a". So &'static T would point at a T value that has to exist for the rest of the program (otherwise the reference would be invalid)
-      As a Lifetime bound: U: 'a means "any value of type U is only valid for at most the lifetime 'a, but can be destroyed or created arbitrary otherwise". So U: 'static would mean that you can keep a value of type U around forever, but don't have to.
-    * &'static means that it lives for the entire lifetime of the program.
-
-      a + 'static bound means live as long as it needs to without being modified by anything else.
-    * T: 'static means that a value of type T is allowed to live for 'static, not that it must.
-    * example
-        ```
-        fn test_generic_bounds<T: 'static>(_t: T) {}
-
-        fn main() {
-            // s1 not static
-            let s1 = String::from("hello");
-            {
-                // s2 also not static
-                let s2 = s1[..3].to_string();
-                // But it passes the 'static bound check
-                test_generic_bounds(s2);
-            }
-            // But it passes the 'static bound check
-            test_generic_bounds(s1);
-        }
-        ```
-    * example
-        ```
-        use std::sync::{Arc, RwLock};
-        use std::thread;
-
-        fn test<T>(data: Arc<RwLock<T>>)
-        where
-            T: 'static + Send + Sync,
-        {
-            // Spawn a worker thread
-            let handle = thread::spawn(move || {
-                // Access the data inside the RwLock
-                let read_guard = data.read().unwrap();
-                println!("Worker Thread: Value inside RwLock: {:?}", *read_guard);
-            });
-
-            // Wait for the worker thread to finish
-            handle.join().unwrap();
-        }
-
-        fn main() {
-            let x = 42; // Some data, in this case, an integer
-
-            // Create an Arc containing an RwLock with a reference to the data
-            let shared_data = Arc::new(RwLock::new(x));
-
-            // Call the test function with the shared data
-            test(shared_data);
-
-            // At this point, shared_data, including the RwLock and the data, still exists.
-            // It will be deallocated when it goes out of scope or when the program ends.
-        }
-        ```
-        * let x = 0; allocates an integer on the stack with the value 0.
-          test(Arc::new(RwLock::new(&x))); creates an Arc (atomic reference counting) and an RwLock wrapping a reference to x. The Arc ensures that the reference count of the data it wraps is incremented.
-          Thread 1:
-          foo returns, and the local variable x goes out of scope.
-          The reference count of the Arc is still greater than zero because it is owned by the RwLock and passed to test. Therefore, the memory is not deallocated.
-          Thread 2:
-          test spawns Thread 2, which will operate on the shared data inside the RwLock.
-          If Thread 2 attempts to access x after Thread 1 has returned, it may encounter a use-after-free error because x is no longer in scope in Thread 1.
-          Potential Issue:
-          If Thread 2 attempts to access x after Thread 1 has returned, it might access a memory location that is no longer valid because x has gone out of scope.
-          This is a classic example of a lifetime issue and can lead to undefined behavior, crashes, or data corruption.
-          Solution:
-          To prevent this issue, the T: 'static bound is used. It enforces that the data wrapped by the Arc must have the 'static lifetime, meaning it lives for the entire duration of the program.
-          If you have data with a shorter lifetime, like a local variable in a function (x in this case), you need to ensure that it outlives all the threads that may access it.
-        * T could still internally borrow something, and that thing could exist for less than the theoretical max life time of the thread you’re spawning (up to the end of the program). Add a + ‘static toT bound or use thread::scope, whichever one is more manageable.\
-    * example
-        ```
-        fn main() {
-            { // // this block has lifetime 'a
-                let t = 3;
-                let r = &t;
-                let a = Arc::new(RwLock::new(r)); // not compile:  borrowed value does not live long enough
-                test(a);
-            } // `t` dropped here while still borrowed
-        ```
-        * ifetime 'a:
-          The outer block is annotated with the lifetime 'a, indicating that any references created within this block should have a lifetime no longer than 'a.
-          Local Variable t:
-          let t = 3; creates a local variable t with the value 3. This variable is specific to the current block and has a lifetime limited to this block.
-          Reference r:
-          let r = &t; creates a reference r to the value of t. The reference r also inherits the lifetime of t, which is limited to the current block.
-          Arc<RwLock<T>>:
-          let a = Arc::new(RwLock::new(r)); attempts to create an Arc containing an RwLock that wraps the reference r. This introduces a problem because the reference r has a lifetime tied to the local variable t.
-          Problematic Situation:
-          The Arc is passed to the test function, which spawns a worker thread. The worker thread may outlive the current block and attempt to access the shared reference r after it has gone out of scope.
-          Undefined Behavior:
-          When the worker thread accesses the shared reference after the original block has ended, it leads to undefined behavior. The reference r is no longer valid, as it points to memory that has been deallocated.
 1. cargo
 1. attributes
     * You
@@ -1078,23 +922,184 @@
     * pass by value = pass a value to a function in a way that moves ownership of the value to the function
     * pass by reference = pass the function a reference to the value
 * lifetime
-    * You must
-      make it apparent in your code that no reference can possibly outlive the value it
-      points to.
-    * Cannot return reference to temporary value
-        ```
-        struct MyStruct {
-            data: String,
-        }
+    * used by borrow checker to determine how long references should be valid
+    * variable's lifetime begins when it is created and ends when it is destroyed
+    * is a construct the compiler uses to ensure all borrows are valid
+        * proof that no reference can possibly outlive the value it points to
+            * example: cannot return reference to temporary value
+                ```
+                fn create_struct<'a>() -> &'a MyStruct {
+                    let tmp = String::from("Hello, Rust!");
 
-        fn create_struct() -> &'static MyStruct {
-            let my_struct = MyStruct {
-                data: String::from("Hello, Rust!"),
-            };
+                    &tmp // Error: Cannot return reference to temporary value
+                }
+                ```
+    * facilitates reasoning
+        * example: function with a signature `go(p: &str))` cannot stash its argument anywhere that will outlive the call
+    * are used in two different ways
+        * reference parameter: `&'a T`
+            * means "reference points at a value of type T that is valid for at least the lifetime 'a"
+        * lifetime bound: `U: 'a`
+            * means "all references in T must outlive lifetime 'a"
+        * `'static`
+            * indicates that the data pointed to by the reference lives for the remaining lifetime of the running program
+                * rather limiting
+                    ```
+                    struct S {
+                        r: &'static i32 // r can only refer to i32 values that will last for the lifetime of the program
+                    }
 
-            &my_struct // Error: Cannot return reference to temporary value
-        }
-        ```
+                    * This says that r can only refer to i32 values that will last for the lifetime of the pro‐
+                      gram, which is rather limiting.
+
+                      * Most are simply 'static, meaning that values of
+                        those types can live for as long as you like; for example, a Vec<i32> is self-contained
+                        and needn’t be dropped before any particular variable goes out of scope.
+                    ```
+            * any owned data always passes a 'static lifetime bound, but a reference to that owned data generally does not
+                * reason: owned data is self-contained and needn’t be dropped before any particular variable goes out of scope
+                * example
+                    | Code 1 | Code 2 |
+                    | ------ | ------ |
+                    | ```rust
+                    fn test<T: 'static>(t: T) {}
+                    fn main() {
+                        let s1 = String::from("s2");
+                        {
+                            let s2 = String::from("s2");
+                            test(s2);
+                        }
+                        test(s1);
+                    }
+                    ``` | ```rust
+                    fn test<T>(t: &'static T) {}
+                    fn main() {
+                        let s1 = String::from("s1");
+                        {
+                            let s2 = String::from("s2");
+                            test(&s2);
+                        }
+                        test(&s1);
+                    }
+                    ``` |
+    * is a proof that no reference can possibly outlive the value it points to
+        * examples
+            * cannot return reference to temporary value
+                ```
+                fn create_struct<'a>() -> &'a MyStruct {
+                    let tmp = String::from("Hello, Rust!");
+
+                    &tmp // Error: Cannot return reference to temporary value
+                }
+                ```
+            * value cannot be dropped when its referents are still alive
+            * reference stored in some data structure must enclose that of the data structure
+    * entirely compile-time
+        * at run time, a reference is nothing but an address
+    * is part of type and has no run-time representation
+    * every type in Rust has a lifetime
+    * function signatures with lifetimes have a few constraints:
+        * any reference must have an annotated lifetime.
+        * any reference being returned must have the same lifetime as an input or be static.
+        * elision
+            * set of rules in Rust that allow the omission of explicit lifetime annotations in function signatures
+            * rules
+                1. each elided lifetime in input position becomes a distinct lifetime parameter
+                    ```
+                    fn print_strings(s1: &str, s2: &str)                        // elided
+                    fn print_strings<'a, 'b>(s1: &'a str, s2: &'b str)          // expanded
+                    ```
+                1. if there is exactly one input lifetime position (elided or not), that lifetime is assigned to all elided output lifetimes
+                    ```
+                    fn as_pair(input1: &str) -> (&str, &str)                    // elided
+                    fn as_pair<'a>(input1: &'a str) -> (&'a str, &'a str)       // expanded
+                    ```
+                1. if there are multiple input lifetime positions, but one of them is &self or &mut self, the lifetime of self is assigned to all elided output lifetimes
+                    ```
+                    pub fn get<Q>(&self, k: &Q) -> Option<&V>                   // elided
+                    pub fn get<'a, 'q, Q>(&'a self, k: &'q Q) -> Option<&'a V>  // expanded
+                    ```
+                1. otherwise, it is an error to elide an output lifetime
+                    ```
+                    fn get_str() -> &str;                                   // ILLEGAL
+                    ```
+    1. 'static
+        * the parameter type `T` may not live long enough
+            ```
+            fn test<T:Sync+Send>(a:Arc<RwLock<T>>){
+                let b = a.clone();
+                thread::spawn(move||{b;}); // compiler error: the parameter type `T` may not live long enough
+            }
+            ```
+            * T could still borrow something which could have a short lifetime so that's why spawn require 'static bound which means that everything is owned. Adding 'static bound to T should solve the issue.
+            * 'static has two different meanings, depending on where it's used.
+
+              In a reference, it means "lives for the rest of the program" while, in a type bound, it means the broader "lives however long I need it to" that encompasses both 'static references and owned values.
+
+              (Technically, they're the same "lives as long as I need it to" meaning... there's just no way for a reference to extend the lifetime of the memory backing it.)
+            * We could say it as, 'static means you have an infinite lease or indeed it can be kept around as long as you'd like.
+            * 'static should really be renamed 'unbounded
+            * A 'static bound on a type means that anything inside that types is 'static or owned, beacuse owned values by definition will live due to being owned.
+        * https://github.com/pretzelhammer/rust-blog/blob/master/posts/common-rust-lifetime-misconceptions.md#2-if-t-static-then-t-must-be-valid-for-the-entire-program
+        * It is confusing. 'static could live for the lifetime of the program. Something on the heap could live that long if never freed. I found it best to think of 'static as meaning not on the stack.
+        * example
+            ```
+            use std::sync::{Arc, RwLock};
+            use std::thread;
+
+            fn test<T>(data: Arc<RwLock<T>>)
+            where
+                T: 'static + Send + Sync,
+            {
+                // Spawn a worker thread
+                let handle = thread::spawn(move || {
+                    // Access the data inside the RwLock
+                    let read_guard = data.read().unwrap();
+                    println!("Worker Thread: Value inside RwLock: {:?}", *read_guard);
+                });
+
+                // Wait for the worker thread to finish
+                handle.join().unwrap();
+            }
+
+            fn main() {
+                let x = 42; // Some data, in this case, an integer
+
+                // Create an Arc containing an RwLock with a reference to the data
+                let shared_data = Arc::new(RwLock::new(x));
+
+                // Call the test function with the shared data
+                test(shared_data);
+
+                // At this point, shared_data, including the RwLock and the data, still exists.
+                // It will be deallocated when it goes out of scope or when the program ends.
+            }
+            ```
+            * let x = 0; allocates an integer on the stack with the value 0.
+              test(Arc::new(RwLock::new(&x))); creates an Arc (atomic reference counting) and an RwLock wrapping a reference to x. The Arc ensures that the reference count of the data it wraps is incremented.
+              Thread 1:
+              foo returns, and the local variable x goes out of scope.
+              The reference count of the Arc is still greater than zero because it is owned by the RwLock and passed to test. Therefore, the memory is not deallocated.
+              Thread 2:
+              test spawns Thread 2, which will operate on the shared data inside the RwLock.
+              If Thread 2 attempts to access x after Thread 1 has returned, it may encounter a use-after-free error because x is no longer in scope in Thread 1.
+              Potential Issue:
+              If Thread 2 attempts to access x after Thread 1 has returned, it might access a memory location that is no longer valid because x has gone out of scope.
+              This is a classic example of a lifetime issue and can lead to undefined behavior, crashes, or data corruption.
+              Solution:
+              To prevent this issue, the T: 'static bound is used. It enforces that the data wrapped by the Arc must have the 'static lifetime, meaning it lives for the entire duration of the program.
+              If you have data with a shorter lifetime, like a local variable in a function (x in this case), you need to ensure that it outlives all the threads that may access it.
+            * T could still internally borrow something, and that thing could exist for less than the theoretical max life time of the thread you’re spawning (up to the end of the program). Add a + ‘static toT bound or use thread::scope, whichever one is more manageable.\
+        * example
+            ```
+            fn main() {
+                { // // this block has lifetime 'a
+                    let t = 3;
+                    let r = &t;
+                    let a = Arc::new(RwLock::new(r)); // not compile:  borrowed value does not live long enough
+                    test(a);
+                } // `t` dropped here while still borrowed
+            ```
 * fat pointers
     * structure which contains
         * the actual pointer to the piece of data
