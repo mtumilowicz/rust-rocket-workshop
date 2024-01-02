@@ -617,180 +617,123 @@
                 }
                 ```
             * solution: box it
-    * useful traits
-        * Any type that implements the
-            FromStr trait has a from_str method that tries to parse a value of that type from a
-            string
-        * std::str::FromStr
-            * Rust provides standard traits for both parsing values from strings and producing tex‐
-              tual representations of values.
-        * Clone
-            * The clone method should construct an independent copy of self and return it.
-            * Cloning a value usually entails allocating copies of anything it owns, as well, so a
-              clone can be expensive, in both time and memory.
-            * #[derive(Clone)]
-            * Some types don’t make sense to copy, like std::sync::Mutex; those
-              don’t implement Clone.
-            * ToOwned
-                * But what if you want to
-                  clone a &str or a &[i32]? What you probably want is a String or a Vec<i32>, but
-                  Clone’s definition doesn’t permit that: by definition, cloning a &T must always return a
-                  value of type T, and str and [u8] are unsized; they aren’t even types that a function
-                  could return.
-                * Unlike clone, which must return exactly Self, to_owned can return anything you
-                  could borrow a &Self from: the Owned type must implement Borrow<Self>.
-        * Cow
-            * The nub of the problem is that sometimes the return value of get_name should be an
-              owned String, sometimes it should be a &'static str, and we can’t know which one
-              it will be until we run the program. This dynamic character is the hint to consider
-              using std::borrow::Cow, the clone-on-write type that can hold either owned or bor‐
-              rowed data.
-                fn get_name() -> String {
-                std::env::var("USER") // Windows uses "USERNAME"
-                .unwrap_or("whoever you are".to_string())
-                }
-                println!("Greetings, {}!", get_name());
-                Since Cow is frequently used for strings, the standard library has some special support
-                for Cow<'a, str>.
-                fn get_name() -> Cow<'static, str> {
-                std::env::var("USER")
-                .map(|v| v.into())
-                .unwrap_or("whoever you are".into())
-                }
-            * Borrowed holds a ref‐
-              erence &'a T, and Owned holds the owning version of &T: String for &str, Vec<i32>
-              for &[i32], and so on.
-            * clone on write
-            * A Cow<B> either borrows a shared reference to a B or owns a value from which we
-              could borrow such a reference.
-            * Since Cow implements Deref, you can call methods on
-              it as if it were a shared reference to a B: if it’s Owned, it borrows a shared reference to
-              the owned value; and if it’s Borrowed, it just hands out the reference it’s holding.
-            * You can also get a mutable reference to a Cow’s value by calling its to_mut method,
-              which returns a &mut B. If the Cow happens to be Cow::Borrowed, to_mut simply calls
-              the reference’s to_owned method to get its own copy of the referent, changes the Cow
-              into a Cow::Owned, and borrows a mutable reference to the newly owned value. This
-              is the “clone on write” behavior the type’s name refers to.
-            * Similarly, Cow has an into_owned method that promotes the reference to an owned
-              value, if necessary, and then returns it, moving ownership to the caller and consum‐
-              ing the Cow in the process.
-            * One common use for Cow is to return either a statically allocated string constant or a
-              computed string.
-                fn describe(error: &Error) -> Cow<'static, str> {
-                match *error {
-                Error::OutOfMemory => "out of memory".into(),
-                Error::StackOverflow => "stack overflow".into(),
-                Error::MachineOnFire => "machine on fire".into(),
-                Error::Unfathomable => "machine bewildered".into(),
-                Error::FileNotFound(ref path) => {
-                format!("file not found: {}", path.display()).into()
-                }
-                }
-                }
-        * Copy
-            * Any type that implements the Drop trait cannot be Copy.
-            * Rust presumes that if a type
-              needs special cleanup code, it must also require special copying code and thus can’t be
-              Copy.
-            * #[derive(Copy)]
-            * Think carefully before making a type Copy. Although doing so makes the type easier
-              to use, it places heavy restrictions on its implementation.
-        * Send, Sync
-            * This is mostly true, but Rust’s full thread safety story hinges on two built-in
-              traits, std::marker::Send and std::marker::Sync.
-            * Types that implement Send are safe to pass by value to another thread. They can
-              be moved across threads.
-            * Types that implement Sync are safe to pass by non-mut reference to another
-              thread. They can be shared across threads.
-            * A struct or enum is Send if its fields are Send, and Sync if its fields are Sync.
-            * Some types are Send, but not Sync. This is generally on purpose, as in the case of
-              mpsc::Receiver, where it guarantees that the receiving end of an mpsc channel is
-              used by only one thread at a time.
-            * The few types that are neither Send nor Sync are mostly those that use mutability in a
-              way that isn’t thread-safe. For example, consider std::rc::Rc<T>, the type of
-              reference-counting smart pointers.
-              * What would happen if Rc<String> were Sync, allowing threads to share a single Rc
-                via shared references? If both threads happen to try to clone the Rc at the same time,
-                as shown in Figure 19-10, we have a data race as both threads increment the shared
+* useful traits
+    * FromStr
+    * Clone
+        * deep copy: expensive, in both time and memory
+        * some types don’t make sense to copy: Mutex
+        * ToOwned
+            * But what if you want to
+              clone a &str or a &[i32]? What you probably want is a String or a Vec<i32>, but
+              Clone’s definition doesn’t permit that: by definition, cloning a &T must always return a
+              value of type T, and str and [u8] are unsized; they aren’t even types that a function
+              could return.
+            * Unlike clone, which must return exactly Self, to_owned can return anything you
+              could borrow a &Self from: the Owned type must implement Borrow<Self>.
+    * Copy
+        * Any type that implements the Drop trait cannot be Copy.
+        * Rust presumes that if a type
+          needs special cleanup code, it must also require special copying code and thus can’t be
+          Copy.
+        * #[derive(Copy)]
+        * Think carefully before making a type Copy. Although doing so makes the type easier
+          to use, it places heavy restrictions on its implementation.
+    * Send, Sync
+        * This is mostly true, but Rust’s full thread safety story hinges on two built-in
+          traits, std::marker::Send and std::marker::Sync.
+        * Types that implement Send are safe to pass by value to another thread. They can
+          be moved across threads.
+        * Types that implement Sync are safe to pass by non-mut reference to another
+          thread. They can be shared across threads.
+        * A struct or enum is Send if its fields are Send, and Sync if its fields are Sync.
+        * Some types are Send, but not Sync. This is generally on purpose, as in the case of
+          mpsc::Receiver, where it guarantees that the receiving end of an mpsc channel is
+          used by only one thread at a time.
+        * The few types that are neither Send nor Sync are mostly those that use mutability in a
+          way that isn’t thread-safe. For example, consider std::rc::Rc<T>, the type of
+          reference-counting smart pointers.
+          * What would happen if Rc<String> were Sync, allowing threads to share a single Rc
+            via shared references? If both threads happen to try to clone the Rc at the same time,
+            as shown in Figure 19-10, we have a data race as both threads increment the shared
 
-                reference count.
-            * Send type can be moved to different thread, Sync type's reference can be moved to different thread.
-            * A type being Send means it can be moved across thread boundaries. This means there is always exactly one owner even as the thread changes.
-            * A type being Sync means it can be shared between threads. This means a value can be borrowed from multiple threads.
-            * Note that those are exclusive: in Rust, a value cannot be moved while borrowed, and you cannot borrow a value you no longer have.
-            * The docs say HashMap is Send + Sync-- how can that be?
-                * It is Send because it can be sent between threads safely.
+            reference count.
+        * Send type can be moved to different thread, Sync type's reference can be moved to different thread.
+        * A type being Send means it can be moved across thread boundaries. This means there is always exactly one owner even as the thread changes.
+        * A type being Sync means it can be shared between threads. This means a value can be borrowed from multiple threads.
+        * Note that those are exclusive: in Rust, a value cannot be moved while borrowed, and you cannot borrow a value you no longer have.
+        * The docs say HashMap is Send + Sync-- how can that be?
+            * It is Send because it can be sent between threads safely.
 
-                  It is Sync because a &HashMap can be sent between threads safely.
-            * Personally, I find it easiest to understand these traits by thinking about types that don't implement them.
-                * For example, Rc is not Send, because it uses non-atomic operations to manage its reference count, which would lead to a data race if an Rc were moved to another thread.
-                * Similarly, RefCell is not Sync, because it allows unsynchronized mutation of its state.
-            * You can read the hashmap, string and pretty much any other ‘simple’ structure concurrently from as many threads as you’d like. At the same time, if you have an exclusive reference, you can modify such structures from whatever thread because there’s only one thread accessing it.
-        * Deref, DerefMut
-            * You can specify how dereferencing operators like * and . behave on your types by
-              implementing the std::ops::Deref and std::ops::DerefMut traits.
-            * For example, if you have a Box<Complex> value b, then *b refers to
-              the Complex value that b points to, and b.re refers to its real component.
-            * If the con‐
-              text assigns or borrows a mutable reference to the referent, Rust uses the DerefMut
-              (“dereference mutably”) trait; otherwise, read-only access is enough, and it uses
-              Deref.
-        * Default
-            * The default method simply returns a fresh value of type Self.
-        * AsRef and AsMut
-            * When a type implements AsRef<T>, that means you can borrow a &T from it effi‐
-              ciently.
-            * AsMut is the analogue for mutable references.
-            * for example, Vec<T> implements AsRef<[T]>, and String implements
-              AsRef<str>.
-            * You might assume that if a type implements AsRef<T>, it should also implement
-              AsMut<T>.
-              * For example, we’ve
-                mentioned that String implements AsRef<[u8]>; this makes sense, as each String
-                certainly has a buffer of bytes that can be useful to access as binary data. However,
-                String further guarantees that those bytes are a well-formed UTF-8 encoding of Uni‐
-                code text; if String implemented AsMut<[u8]>, that would let callers change the
-                String’s bytes to anything they wanted, and you could no longer trust a String to be
-                well-formed UTF-8. It only makes sense for a type to implement AsMut<T> if modify‐
-                ing the given T cannot violate the type’s invariants.
-        * From and Into
-            * the effect is much like that of overloading a
-              function in C++.
-            * fn ping<A>(address: A) -> std::io::Result<bool>
-              where A: Into<Ipv4Addr>
-              println!("{:?}", ping(Ipv4Addr::new(23, 21, 68, 141))); // pass an Ipv4Addr
-              println!("{:?}", ping([66, 146, 219, 98])); // pass a [u8; 4]
-            * The ? operator uses From and Into to help clean up code in functions that could fail
-              in multiple ways by automatically converting from specific error types to general ones
-              when needed.
-              * https://www.reddit.com/r/rust/comments/iuespp/question_mark_operator_implicit_conversion_why/
-            * From and Into are infallible traits—their API requires that conversions will not fail.
-        * TryFrom and TryInto
-            * Where From and Into relate types with simple conversions, TryFrom and TryInto
-              extend the simplicity of From and Into conversions with the expressive error han‐
-              dling afforded by Result.
-        * PartialEq
-        * Rust can automatically implement them for you, with mechanical accuracy. Just add a
-          #[derive] attribute to the struct:
-          #[derive(Copy, Clone, Debug, PartialEq)]
-        * Sized
-            * A sized type is one whose values all have the same size in memory.
-                * every u64 takes eight bytes, every (f32, f32, f32) tuple twelve
-            * All sized types implement the std::marker::Sized trait, which has no methods or
-              associated types.
-            * Rust can’t store unsized values in variables or pass them as arguments. You can only
-              deal with them through pointers like &str or Box<dyn Write>, which themselves are
-              sized.
-            * 13-1, a pointer to an unsized value is always a fat pointer,
-              two words wide: a pointer to a slice also carries the slice’s length, and a trait object
-              also carries a pointer to a vtable of method implementations.
-            * A struct
-              type’s last field (but only its last) may be unsized, and such a struct is itself unsized.
-        * debug, display
-            1. debug vs Display
-                * The #[derive(Debug)] attribute tells the compiler to generate some extra code that
-                  allows us to format the Arguments struct with {:?} in println!.
-    * macros (derev)
+              It is Sync because a &HashMap can be sent between threads safely.
+        * Personally, I find it easiest to understand these traits by thinking about types that don't implement them.
+            * For example, Rc is not Send, because it uses non-atomic operations to manage its reference count, which would lead to a data race if an Rc were moved to another thread.
+            * Similarly, RefCell is not Sync, because it allows unsynchronized mutation of its state.
+        * You can read the hashmap, string and pretty much any other ‘simple’ structure concurrently from as many threads as you’d like. At the same time, if you have an exclusive reference, you can modify such structures from whatever thread because there’s only one thread accessing it.
+    * Deref, DerefMut
+        * You can specify how dereferencing operators like * and . behave on your types by
+          implementing the std::ops::Deref and std::ops::DerefMut traits.
+        * For example, if you have a Box<Complex> value b, then *b refers to
+          the Complex value that b points to, and b.re refers to its real component.
+        * If the con‐
+          text assigns or borrows a mutable reference to the referent, Rust uses the DerefMut
+          (“dereference mutably”) trait; otherwise, read-only access is enough, and it uses
+          Deref.
+    * Default
+        * The default method simply returns a fresh value of type Self.
+    * AsRef and AsMut
+        * When a type implements AsRef<T>, that means you can borrow a &T from it effi‐
+          ciently.
+        * AsMut is the analogue for mutable references.
+        * for example, Vec<T> implements AsRef<[T]>, and String implements
+          AsRef<str>.
+        * You might assume that if a type implements AsRef<T>, it should also implement
+          AsMut<T>.
+          * For example, we’ve
+            mentioned that String implements AsRef<[u8]>; this makes sense, as each String
+            certainly has a buffer of bytes that can be useful to access as binary data. However,
+            String further guarantees that those bytes are a well-formed UTF-8 encoding of Uni‐
+            code text; if String implemented AsMut<[u8]>, that would let callers change the
+            String’s bytes to anything they wanted, and you could no longer trust a String to be
+            well-formed UTF-8. It only makes sense for a type to implement AsMut<T> if modify‐
+            ing the given T cannot violate the type’s invariants.
+    * From and Into
+        * the effect is much like that of overloading a
+          function in C++.
+        * fn ping<A>(address: A) -> std::io::Result<bool>
+          where A: Into<Ipv4Addr>
+          println!("{:?}", ping(Ipv4Addr::new(23, 21, 68, 141))); // pass an Ipv4Addr
+          println!("{:?}", ping([66, 146, 219, 98])); // pass a [u8; 4]
+        * The ? operator uses From and Into to help clean up code in functions that could fail
+          in multiple ways by automatically converting from specific error types to general ones
+          when needed.
+          * https://www.reddit.com/r/rust/comments/iuespp/question_mark_operator_implicit_conversion_why/
+        * From and Into are infallible traits—their API requires that conversions will not fail.
+    * TryFrom and TryInto
+        * Where From and Into relate types with simple conversions, TryFrom and TryInto
+          extend the simplicity of From and Into conversions with the expressive error han‐
+          dling afforded by Result.
+    * PartialEq
+    * Rust can automatically implement them for you, with mechanical accuracy. Just add a
+      #[derive] attribute to the struct:
+      #[derive(Copy, Clone, Debug, PartialEq)]
+    * Sized
+        * A sized type is one whose values all have the same size in memory.
+            * every u64 takes eight bytes, every (f32, f32, f32) tuple twelve
+        * All sized types implement the std::marker::Sized trait, which has no methods or
+          associated types.
+        * Rust can’t store unsized values in variables or pass them as arguments. You can only
+          deal with them through pointers like &str or Box<dyn Write>, which themselves are
+          sized.
+        * 13-1, a pointer to an unsized value is always a fat pointer,
+          two words wide: a pointer to a slice also carries the slice’s length, and a trait object
+          also carries a pointer to a vtable of method implementations.
+        * A struct
+          type’s last field (but only its last) may be unsized, and such a struct is itself unsized.
+    * debug, display
+        1. debug vs Display
+            * The #[derive(Debug)] attribute tells the compiler to generate some extra code that
+              allows us to format the Arguments struct with {:?} in println!.
+* macros (derev)
 
 ## closures
 * closure may contain data
@@ -1040,6 +983,44 @@
     * simplest way to allocate a value in the heap
     * `Box::new(v)` allocates some heap space, moves the value v into it, and returns a `Box` pointing to the heap space
     * if goes out of scope, the memory is freed immediately
+* `Cow<'a, T>`
+    * means "clone on write"
+    * is an enum that can either be
+        * `Cow::Borrowed`: borrowed reference `(&'a T)`
+        * `Cow::Owned`: owned value `T`
+    * implements `Deref`
+    * to get a mutable reference: `to_mut`
+        * invoking it on `Cow::Borrowed` calls the reference’s `to_owned` method to get its own copy of the referent,
+        changes into a `Cow::Owned`, and borrows a mutable reference to the newly owned value
+            * "clone on write" behaviour
+        * similarly, method `into_owned` promotes the reference to an owned
+        value and then returns it, moving ownership to the caller
+    * problem: return value should be an owned `String` or sometimes it should be a `&'static str`
+        ```
+        fn get_name() -> String {
+            std::env::var("USER")
+                .unwrap_or("whoever you are") // expected `String`, found `&str`
+        }
+        ```
+        solution
+        ```
+        fn get_name() -> Cow<'static, str> {
+            std::env::var("USER")
+                .map(|v| v.into())
+                .unwrap_or("whoever you are".into()) // std has special support for Cow<'a, str>
+        }
+        ```
+    * common use case: return either a statically allocated string constant or a computed string
+        ```
+        fn describe(error: &MyError) -> Cow<'static, str> {
+            match error {
+                MyError::OutOfMemory => "out of memory".into(),
+                MyError::FileNotFound(ref path) => {
+                    format!("file not found: {}", path.display()).into()
+                }
+            }
+        }
+        ```
 * CQRS
     * command
         * when you create / insert into a data structure, you move the data in (not reference &)
