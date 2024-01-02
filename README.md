@@ -961,7 +961,7 @@
                 * example
                   | Code 1                                                         | Code 2                                                         |
                   | -------------------------------------------------------------- | -------------------------------------------------------------- |
-                  | ```rust                                                        | ```rust                                                        |
+                  | ```                                                            | ```                                                        |
                   | fn test<T: 'static>(t: T) {}                                   | fn test<T>(t: &'static T) {}                                   |
                   | fn main() {                                                    | fn main() {                                                     |
                   |     let s1 = String::from("s2");                               |     let s1 = String::from("s1");                               |
@@ -970,7 +970,8 @@
                   |         test(s2);                                              |         test(&s2);                                             |
                   |     }                                                          |     }                                                            |
                   |     test(s1);                                                  |     test(&s1);                                                 |
-                  | }                                                              | }                                                              |
+                  | }                                                              |                                                 |
+                  |```                                                             |   ```                                              |
 
     * is a proof that no reference can possibly outlive the value it points to
         * examples
