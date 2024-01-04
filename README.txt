@@ -26,6 +26,21 @@
     * http://xion.io/post/code/rust-patterns-ref.html
     * https://github.com/pretzelhammer/rust-blog/blob/master/posts/common-rust-lifetime-misconceptions.md
     * https://www.cs.brandeis.edu/~cs146a/rust/doc-02-21-2015/book/static-and-dynamic-dispatch.html
+    * https://dhghomon.github.io/easy_rust
+    * https://stackoverflow.com/questions/49377231/when-to-use-rc-vs-box
+    * https://stackoverflow.com/questions/31012923/what-is-the-difference-between-copy-and-clone
+    * https://stackoverflow.com/questions/31168589/how-to-force-a-move-of-a-type-which-implements-the-copy-trait
+    * https://users.rust-lang.org/t/behind-the-scenes-how-does-rust-move-structs/99229/2
+    * https://www.reddit.com/r/rust/comments/ykku69/does_the_compiler_optimize_moves/
+    * https://www.reddit.com/r/rust/comments/f6urwh/why_move_semantics_for_value_types/
+    * https://stackoverflow.com/questions/29490670/how-does-rust-provide-move-semantics
+    * https://stackoverflow.com/questions/59628211/what-happens-in-memory-when-ownership-is-transferred-out-of-a-box
+    * https://stackoverflow.com/questions/53465843/why-does-move-in-rust-not-actually-move
+    * https://stackoverflow.com/questions/30288782/what-are-move-semantics-in-rust
+    * https://www.reddit.com/r/rust/comments/f6urwh/why_move_semantics_for_value_types/
+    * https://www.reddit.com/r/rust/comments/rlzhy1/rust_is_creating_copy_instead_of_moving/
+    * https://www.reddit.com/r/rust/comments/qw7wxx/why_does_mean_both_copy_and_move_where_are_the/
+    * https://www.reddit.com/r/rust/comments/srtuhy/when_a_move_occurs_what_happens_behind_the_scenes/
 
 1. general
     * allocates on stack by default
@@ -631,13 +646,117 @@
             * Unlike clone, which must return exactly Self, to_owned can return anything you
               could borrow a &Self from: the Owned type must implement Borrow<Self>.
     * Copy
-        * Any type that implements the Drop trait cannot be Copy.
-        * Rust presumes that if a type
-          needs special cleanup code, it must also require special copying code and thus can’t be
-          Copy.
-        * #[derive(Copy)]
-        * Think carefully before making a type Copy. Although doing so makes the type easier
-          to use, it places heavy restrictions on its implementation.
+        * any type that implements the Drop trait cannot be Copy
+            * a and b don't have to alias heap data to make using both a bad idea.
+                * For example, they could both be file handles - a copy would result in the file being closed twice.
+            * assumption: if a type needs special cleanup code, it must also require special copying code
+            * example: Box
+                * copying it directly using memcpy or similar low-level operations would result in two Box instances pointing to the same memory
+                    * memory safety issue: double deallocation
+            * example: Mutex
+                * Brings back ugly memories of two weeks of debugging multithreaded C code (that I didn't wrote) passing a mutex by value, what could go wrong?
+                * the attempt to move the Mutex by value to another thread (thread::spawn(move || {...}) would result in a compilation error. This is because the Mutex type does not implement the Copy trait
+        * I suppose you assumed that "move operation" and "copy operation" are different, didn't you? In fact, they are exactly the same. Regardless of whether x's type implements Copy trait or not, let y = x; always does the same thing (memcpy).
+          If implementing Copy doesn't change what let y = x; does, so what does it do? If x's type implements Copy, it only tells the compiler that x can still be used even after an assignment operation (let y = x;).
+        * Your question is strange, because you explicitly tells Rust to move the object (meaning move from one place to another). In this case, it is to move from a stack slot to another stack slot.
+            * if you use &mut self instead of mut self, you're still telling Rust to move, but you'll be moving the pointer instead.
+        * I don't know about other OS but when I copy large videos on Linux, they take time while when I move them (cut/paste on same partition) it happens instantaneously and thus I've always thought that move just means changing underlying pointer stuff and is different from copying
+            * This is a good analogy.
+
+              self = Physically moving a file from one disk area to another, vs. &self/&mut self = moving an inode pointer.
+
+              The first you copy n bytes, where n = size of file. The second you copy m bytes where m = address, typically disk+sector; the CPU analogy is a RAM address pointer which is 8 bytes on 64-bit architectures.
+        * Moving a value is *always* a bit-wise copy, even if the type isn't Copy. For a type that contains some indirection (a pointer or reference to other data, possibly on the Heap), the difference between a cheap Move and an expensive Clone is that the former *only* copies the pointer, while the latter has to also create a new copy of whatever is being pointed to.
+        * There is no way for Rust to "cheaply" move a Massive. How would it even do so? There is no indirection, nothing that can be copied while leaving the rest "somewhere else". It's all or nothing. To cheaply *pass* a Massive, you would have to pass a reference to it instead.
+        * In rust, Copy is a property of the type, not the operation.
+
+          a = b; is always a move. It doesn't matter whether b is Copy or not, it doesn't change the meaning of this operation, so a dedicated syntax would not make sense, because there's nothing to differentiate.
+
+          Similarly, a function callf(b); always moves b, as do a host of other operations.
+        * I would like to add that it is not necessary for move to memcpy. If the object on the stack is large enough, Rust's compiler may choose to pass the object's pointer instead.
+        * It’s important to note that in these two examples, the only difference is whether you are allowed to access x after the assignment. Under the hood, both a copy and a move can result in bits being copied in memory, although this is sometimes optimized away.
+        * The behavior of Copy is not overloadable; it is always a simple bit-wise copy.
+        * Generally speaking, if your type can implement Copy
+            * it could be prudent to omit the Copy implementation now, to avoid a breaking API change.
+        * Both "copy" and "move" are semantically memcpy (though that may be optimised to something else, or even nothing whatsoever).
+        * Rust's memory model works: local variables are on the stack. Since the stack space of foo is going away when the function returns, there's nothing else the compiler can do except copy the memory to main's stack space.
+        * Moves are cheap and the performance is predictable. It's basically memcpy. Returning a huge Vec is always fast—you're just copying three words.
+        * places heavy restrictions on its implementation
+        * every Copy type is also required to be Clone
+            * Copy is a special case of Clone where the implementation is just "copy the bits"
+            * reverse is not true: Vec<T>, String
+        * Copy types are implicitly cloned whenever they're moved, but because of the definition of Copy this just means not treating the old copy as uninitialized -- a no-op.
+        * At most x = y just moves the bits of y into the x variable.
+        * represents values that can be safely duplicated via memcpy
+            * simply copying the bits in memory
+        * cannot be re-implemented
+        * applied to types that represent simple values like integers, floating-point numbers, characters, and tuples,
+        where a bitwise copy is sufficient for duplication
+            * example: in the u8 case, you cannot possibly be more efficient with a move, since under the hood
+            it would probably at least entail a pointer copy
+                * it is already as expensive as a u8 copy, so why bother
+        * how to force a move of a type which implements the Copy trait?
+            * question does not make sense - it is always move
+        * For types where this is not useful, such as most “plain old data” that doesn't contain any heap allocations, you implement Copy 2 to opt out of the invalidation.
+        * if you do f(x) (and not f(&x) or f(&mut x) the bytes of x really get copied into f's stack frame, at least in debug builds. It's up to llvm to optimize out this copy in release builds.
+        * Imagine b was a Vec. A Vec looks like this:
+
+          { &mut data, length, capacity }
+          When you write let a = b you thus end up with:
+
+          b = { &mut data, length, capacity }
+          a = { &mut data, length, capacity }
+          This means that a and b both reference &mut data, which means we have aliased mutable data.
+        * optimisations
+            * example
+                ```
+                fn main() {
+                    let s = "Hello, World!".to_string();
+                    let t = s;
+                    println!("{}", t);
+                }
+                ```
+                If you check the LLVM IR (in Debug), you'll see:
+                ```
+                %_5 = alloca %"alloc::string::String", align 8
+                %t = alloca %"alloc::string::String", align 8
+                %s = alloca %"alloc::string::String", align 8
+
+                %0 = bitcast %"alloc::string::String"* %s to i8*
+                %1 = bitcast %"alloc::string::String"* %_5 to i8*
+                call void @llvm.memcpy.p0i8.p0i8.i64(i8* %1, i8* %0, i64 24, i32 8, i1 false)
+                %2 = bitcast %"alloc::string::String"* %_5 to i8*
+                %3 = bitcast %"alloc::string::String"* %t to i8*
+                call void @llvm.memcpy.p0i8.p0i8.i64(i8* %3, i8* %2, i64 24, i32 8, i1 false)
+                ```
+                checking the same IR in Release mode you will realize that LLVM has completely elided the copies (realizing that s was unused).
+            * The same situation occurs when calling a function: in theory you "move" the object into the function stack frame, however in practice if the object is large the rustc compiler might switch to passing a pointer instead.
+            * Another situation is returning from a function, but even then the compiler might apply "return value optimization" and build directly in the caller's stack frame -- that is, the caller passes a pointer into which to write the return value, which is used without intermediary storage.
+        * affects how the compiler uses moves vs automatic copies
+            * example
+                ```
+                #[derive(Debug, Clone, Copy)]
+                pub struct PointCloneAndCopy {
+                    pub x: f64,
+                }
+
+                #[derive(Debug, Clone)]
+                pub struct PointCloneOnly {
+                    pub x: f64,
+                }
+
+                fn test_copy() {
+                    let p1 = PointCloneAndCopy { x: 0. };
+                    let p2 = p1; // because type has `Copy`, it gets copied automatically.
+                }
+
+                fn test_move() {
+                    let p1 = PointCloneOnly { x: 0. };
+                    // To avoid the implicit move, we could explicitly call let p2 = p1.clone();
+                    let p2 = p1; // because type has no `Copy`, this is a move instead.
+                }
+                ```
+    * Drop
     * Send, Sync
         * This is mostly true, but Rust’s full thread safety story hinges on two built-in
           traits, std::marker::Send and std::marker::Sync.
@@ -1021,6 +1140,10 @@
             }
         }
         ```
+* `Rc<T>`
+    * means "reference counter"
+    * its contents can't be mutated
+* `Arc<T>`
 * CQRS
     * command
         * when you create / insert into a data structure, you move the data in (not reference &)
