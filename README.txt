@@ -1,7 +1,6 @@
 
 * references
-    * https://doc.rust-lang.org/book/
-    * https://doc.rust-lang.org/stable/rust-by-example/
+    * https://doc.rust-lang.org/
     * https://rust-unofficial.github.io/too-many-lists/
     * https://www.reddit.com/r/rust/comments/wo46dz/does_using_string_instead_of_str_a_lot_results_in/
     * https://www.reddit.com/r/rust/comments/cyymw2/rule_of_thumb_for_struct_data_types/
@@ -21,7 +20,6 @@
     * https://stackoverflow.com/questions/26469715/how-do-i-write-a-rust-unit-test-that-ensures-that-a-panic-has-occurred
     * https://www.reddit.com/r/rust/comments/ui7ayd/why_does_rust_not_have_a_standard_async_runtime/
     * https://rustjobs.dev/blog/difference-between-string-and-str-in-rust/
-    * https://doc.rust-lang.org/std
     * https://users.rust-lang.org/t/whats-the-difference-between-string-and-str/10177/2
     * http://xion.io/post/code/rust-patterns-ref.html
     * https://github.com/pretzelhammer/rust-blog/blob/master/posts/common-rust-lifetime-misconceptions.md
@@ -41,6 +39,9 @@
     * https://www.reddit.com/r/rust/comments/rlzhy1/rust_is_creating_copy_instead_of_moving/
     * https://www.reddit.com/r/rust/comments/qw7wxx/why_does_mean_both_copy_and_move_where_are_the/
     * https://www.reddit.com/r/rust/comments/srtuhy/when_a_move_occurs_what_happens_behind_the_scenes/
+    * https://users.rust-lang.org/t/sync-but-not-send/21551/5
+    * https://www.reddit.com/r/rust/comments/iuespp/question_mark_operator_implicit_conversion_why/
+    * https://web.mit.edu/rust-lang_v1.25/
 
 1. general
     * allocates on stack by default
@@ -633,8 +634,9 @@
                 ```
             * solution: box it
 * useful traits
-    * FromStr
-    * Clone
+    * some of them Rust can automatically implement for you with `#[derive]` attribute
+        * example: `#[derive(Copy, Clone, Debug, PartialEq)]`
+    * `Clone`
         * deep copy: expensive, in both time and memory
         * some types don’t make sense to copy: Mutex
         * ToOwned
@@ -645,7 +647,7 @@
               could return.
             * Unlike clone, which must return exactly Self, to_owned can return anything you
               could borrow a &Self from: the Owned type must implement Borrow<Self>.
-    * Copy
+    * `Copy`
         * represents values that can be safely duplicated via `memcpy`: simply copying the bits in memory
             * derived: `#[derive(Clone, Copy)]`
                 * cannot be re-implemented
@@ -737,85 +739,140 @@
             * however, it could be prudent to omit the `Copy` implementation, to avoid a breaking API change
         * how to force a move of a type which implements the Copy trait?
             * question does not make sense - it is always move
-    * Drop
-    * Send, Sync
-        * This is mostly true, but Rust’s full thread safety story hinges on two built-in
-          traits, std::marker::Send and std::marker::Sync.
-        * Types that implement Send are safe to pass by value to another thread. They can
-          be moved across threads.
-        * Types that implement Sync are safe to pass by non-mut reference to another
-          thread. They can be shared across threads.
-        * A struct or enum is Send if its fields are Send, and Sync if its fields are Sync.
-        * Some types are Send, but not Sync. This is generally on purpose, as in the case of
-          mpsc::Receiver, where it guarantees that the receiving end of an mpsc channel is
-          used by only one thread at a time.
-        * The few types that are neither Send nor Sync are mostly those that use mutability in a
-          way that isn’t thread-safe. For example, consider std::rc::Rc<T>, the type of
-          reference-counting smart pointers.
-          * What would happen if Rc<String> were Sync, allowing threads to share a single Rc
-            via shared references? If both threads happen to try to clone the Rc at the same time,
-            as shown in Figure 19-10, we have a data race as both threads increment the shared
+    * `Deref`, `DerefMut`
+        * specify how dereferencing operators like `*` and `.` behave
+            * without it the compiler can only dereference & references
+            * example
+                ```
+                struct MyBox<T>(T);
 
-            reference count.
-        * Send type can be moved to different thread, Sync type's reference can be moved to different thread.
-        * A type being Send means it can be moved across thread boundaries. This means there is always exactly one owner even as the thread changes.
-        * A type being Sync means it can be shared between threads. This means a value can be borrowed from multiple threads.
-        * Note that those are exclusive: in Rust, a value cannot be moved while borrowed, and you cannot borrow a value you no longer have.
-        * The docs say HashMap is Send + Sync-- how can that be?
-            * It is Send because it can be sent between threads safely.
+                impl<T> Deref for MyBox<T> {
+                    type Target = T;
 
-              It is Sync because a &HashMap can be sent between threads safely.
-        * Personally, I find it easiest to understand these traits by thinking about types that don't implement them.
-            * For example, Rc is not Send, because it uses non-atomic operations to manage its reference count, which would lead to a data race if an Rc were moved to another thread.
-            * Similarly, RefCell is not Sync, because it allows unsynchronized mutation of its state.
-        * You can read the hashmap, string and pretty much any other ‘simple’ structure concurrently from as many threads as you’d like. At the same time, if you have an exclusive reference, you can modify such structures from whatever thread because there’s only one thread accessing it.
-    * Deref, DerefMut
-        * You can specify how dereferencing operators like * and . behave on your types by
-          implementing the std::ops::Deref and std::ops::DerefMut traits.
-        * For example, if you have a Box<Complex> value b, then *b refers to
-          the Complex value that b points to, and b.re refers to its real component.
-        * If the con‐
-          text assigns or borrows a mutable reference to the referent, Rust uses the DerefMut
-          (“dereference mutably”) trait; otherwise, read-only access is enough, and it uses
-          Deref.
-    * Default
-        * The default method simply returns a fresh value of type Self.
-    * AsRef and AsMut
-        * When a type implements AsRef<T>, that means you can borrow a &T from it effi‐
-          ciently.
-        * AsMut is the analogue for mutable references.
-        * for example, Vec<T> implements AsRef<[T]>, and String implements
-          AsRef<str>.
-        * You might assume that if a type implements AsRef<T>, it should also implement
-          AsMut<T>.
-          * For example, we’ve
-            mentioned that String implements AsRef<[u8]>; this makes sense, as each String
-            certainly has a buffer of bytes that can be useful to access as binary data. However,
-            String further guarantees that those bytes are a well-formed UTF-8 encoding of Uni‐
-            code text; if String implemented AsMut<[u8]>, that would let callers change the
-            String’s bytes to anything they wanted, and you could no longer trust a String to be
-            well-formed UTF-8. It only makes sense for a type to implement AsMut<T> if modify‐
-            ing the given T cannot violate the type’s invariants.
-    * From and Into
-        * the effect is much like that of overloading a
-          function in C++.
-        * fn ping<A>(address: A) -> std::io::Result<bool>
-          where A: Into<Ipv4Addr>
-          println!("{:?}", ping(Ipv4Addr::new(23, 21, 68, 141))); // pass an Ipv4Addr
-          println!("{:?}", ping([66, 146, 219, 98])); // pass a [u8; 4]
-        * The ? operator uses From and Into to help clean up code in functions that could fail
-          in multiple ways by automatically converting from specific error types to general ones
-          when needed.
-          * https://www.reddit.com/r/rust/comments/iuespp/question_mark_operator_implicit_conversion_why/
-        * From and Into are infallible traits—their API requires that conversions will not fail.
-    * TryFrom and TryInto
-        * Where From and Into relate types with simple conversions, TryFrom and TryInto
-          extend the simplicity of From and Into conversions with the expressive error han‐
-          dling afforded by Result.
+                    fn deref(&self) -> &Self::Target {
+                        &self.0
+                    }
+                }
+
+                let x = 5;
+                let y = MyBox(x);
+
+                assert_eq!(5, *y); // behind the scenes: *(y.deref())
+                ```
+        * example: Box
+            ```
+            #[derive(Debug)]
+            struct MyStruct {
+                value: i32,
+            }
+
+            let s1 = MyStruct { value: 42 };
+            let s2 = MyStruct { value: 42 };
+            let box_deref_star = Box::new(s1);
+            let box_deref_dot = Box::new(s2);
+
+            let deref_star: MyStruct = *box_deref_star; // manual deref with *
+
+            let deref_dot: i32 = box_deref_dot.value; // automatic deref with .
+
+            fn coercion(value: &MyStruct) {
+
+            }
+            coercion(&box_deref_dot) // automatic deref with coercion
+            ```
+    * `Drop`
+        * called automatically when an object goes out of scope
+        * used to free the resources
+        * example: `Box`, `Vec`
+    * `From` and `Into`
+        * useful when performing error handling and is closely related to the ? operator
+            * resolves composition of distinct error types
+            * Rust performs implicit conversion on the error value using the From trait
+                ```
+                struct BadRequest {
+                    message: String,
+                }
+
+                impl From<io::Error> for BadRequest {
+                    fn from(error: io::Error) -> Self {
+                        BadRequest {
+                            message: format!("IoError: {}", error),
+                        }
+                    }
+                }
+
+                impl From<num::ParseIntError> for BadRequest {
+                    fn from(error: num::ParseIntError) -> Self {
+                        BadRequest {
+                            message: format!("ParseIntError: {}", error),
+                        }
+                    }
+                }
+
+                fn read_file(file_name: &str) -> Result<String, io::Error> {
+                    Ok(String::from("a"))
+                }
+
+                fn open_and_parse_file(file_name: &str) -> Result<i32, BadRequest> {
+                    let content = read_file(file_name)?;
+                    let num: i32 = content.parse()?;
+                    Ok(num)
+                }
+                ```
+        * Rust provides Into implementation for types that have provided From implementation.
+            * Into should be used, in cases where From cannot be implemented.
+        * conversions cannot fail
+            * use: TryFrom and TryInto
+    * `Send`, `Sync`
+        * `Send` = can be moved to different thread
+            * means there is always exactly one owner even as the thread changes
+        * `Sync` = `T` is `Sync` if and only if `&T` is `Send`
+            * other words: non-mut reference can be moved to different thread
+            * means a value can be borrowed from multiple threads
+        * Rust’s full thread safety story hinges on these two built-in traits
+            * example: HashMap is `Send` + `Sync`
+                * can be read concurrently if there is not mutable reference
+                * can be modified from any thread as long as there is exclusive mutable reference
+                    * only one thread accessing it
+        * automatically derived traits
+            * if a type is composed entirely of Send or Sync types, then it is Send or Sync
+        * some types are `Send`, but not `Sync`
+            * example: mpsc::Receiver
+                * it guarantees that the receiving end of an mpsc channel is used by only one thread at a time
+        * some types are `Sync` but not `Send`
+            * example
+                * MutexGuard
+                    * not `Send`: uses libraries that require you to ensure you don't try to free a lock that you acquired in a different thread
+                        * if you were able to Send a MutexGuard to another thread the destructor would run in the thread you sent it to, violating the requirement
+                    * can still be Sync because all you can send to another thread is an &MutexGuard and dropping a reference does nothing
+                * thread-local allocator which doesn’t have any locks, but requires alloc/dealloc happen on the same thread
+                    * OpenSpan<Attached> from zipkin
+        * few types that are neither `Send` nor `Sync`
+            * usually uses internal mutability in a way that isn’t thread-safe
+            * example: `std::rc::Rc<T>`
+                * reason: uses non-atomic operations to manage its reference count
+                * not `Send`
+                    ```
+                    let rc = Rc::new(42);
+
+                    let handle = thread::spawn(move || {
+                        let rc2 = rc.clone(); // race condition to reference count
+                    });
+
+                    rc.clone();
+                    ```
+                * not `Sync`
+                    ```
+                    let rc = Rc::new(42);
+                    let ref_rc = &rc;
+
+                    let handle = thread::spawn(move || {
+                        ref_rc.clone(); // race condition to reference count
+                    });
+
+                    ref_rc.clone();
+                    ```
     * PartialEq
-    * Rust can automatically implement them for you, with mechanical accuracy. Just add a
-      #[derive] attribute to the struct:
-      #[derive(Copy, Clone, Debug, PartialEq)]
     * Sized
         * A sized type is one whose values all have the same size in memory.
             * every u64 takes eight bytes, every (f32, f32, f32) tuple twelve
@@ -833,6 +890,7 @@
         1. debug vs Display
             * The #[derive(Debug)] attribute tells the compiler to generate some extra code that
               allows us to format the Arguments struct with {:?} in println!.
+    * FromStr
 * macros (derev)
 
 ## closures
