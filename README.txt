@@ -42,6 +42,18 @@
     * https://users.rust-lang.org/t/sync-but-not-send/21551/5
     * https://www.reddit.com/r/rust/comments/iuespp/question_mark_operator_implicit_conversion_why/
     * https://web.mit.edu/rust-lang_v1.25/
+    * https://nnethercote.github.io/2021/12/08/a-brutally-effective-hash-function-in-rust.html
+    * https://medium.com/@luishrsoares/exploring-hash-functions-in-rust-fowler-noll-vo-fnv-siphash-and-beyond-63183a4d7de
+    * https://stackoverflow.com/questions/55128808/when-is-it-appropriate-to-require-only-partialeq-and-not-eq
+    * https://doc.rust-lang.org/book/appendix-03-derivable-traits.html#partialeq-and-eq-for-equality-comparisons
+    * https://www.reddit.com/r/rust/comments/11gm19h/why_eq_partialeq_ord_and_partialord_especially/
+    * https://stackoverflow.com/questions/61293115/how-can-a-struct-be-unsized
+    * https://medium.com/tips-for-rust-developers/pin-276bed513fd1
+    * https://www.reddit.com/r/rust/comments/eo7u4o/futures_pinning_101/
+    * https://www.reddit.com/r/rust/comments/pbemse/pin_unpin_and_why_rust_needs_them_blogexplainer/
+    * https://www.reddit.com/r/rust/comments/f55ur9/fromstr_vs_fromstr_vs_fromstring_which_should_i/
+    * https://stackoverflow.com/questions/67385956/what-is-the-difference-between-the-fromstr-and-tryfromstring-traits
+    * https://stackoverflow.com/questions/71487308/is-there-any-real-difference-between-fromstr-and-tryfromstr
 
 1. general
     * allocates on stack by default
@@ -739,6 +751,16 @@
             * however, it could be prudent to omit the `Copy` implementation, to avoid a breaking API change
         * how to force a move of a type which implements the Copy trait?
             * question does not make sense - it is always move
+    * `Debug`, `Display`
+        * `Debug` should format the output in a programmer-facing, debugging context
+            * should be derived
+            * is printing for the programmer, because it usually shows more information
+            * means printing with `{:?}`
+        * `Display` is for user-facing output
+            * must be manually implemented
+            * means printing with `{}`
+            * automatically implement the ToString trait
+                * ToString should never be implemented but Display instead
     * `Deref`, `DerefMut`
         * specify how dereferencing operators like `*` and `.` behave
             * without it the compiler can only dereference & references
@@ -784,6 +806,23 @@
         * called automatically when an object goes out of scope
         * used to free the resources
         * example: `Box`, `Vec`
+    * `Eq`, `Hash`, `PartialEq`
+        * `PartialEq` = corresponds to a partial equivalence relation
+            * symmetric, transitive
+        * `Eq` = corresponds to equivalence relation
+            * has no methods
+                * purpose is to signal that for every value of the annotated type, the value is equal to itself
+            * property cannot be checked by the compiler
+            * PartialEq` + reflexive
+            * floating point types implement `PartialEq` but not `Eq`
+                * NaN != NaN
+        * `PartialEq` vs `Eq`
+            * `HashMap` requires `Eq`
+                * if you could use `PartialEq`, you would run the risk of black-holing certain values
+            * `assert_eq!` requires `PartialEq`
+                * otherwise we could check equality of floats
+        * `Hash` uses Siphash 1-3
+            * Siphash is a cryptographic algorithm that protects hash-flooding denial-of-service attacks
     * `From` and `Into`
         * useful when performing error handling and is closely related to the ? operator
             * resolves composition of distinct error types
@@ -822,7 +861,7 @@
         * Rust provides Into implementation for types that have provided From implementation.
             * Into should be used, in cases where From cannot be implemented.
         * conversions cannot fail
-            * use: TryFrom and TryInto
+            * use: TryFrom, TryInto, FromStr (kept historical reasons, but equivalent for newer TryFrom<&str>)
     * `Send`, `Sync`
         * `Send` = can be moved to different thread
             * means there is always exactly one owner even as the thread changes
@@ -872,26 +911,30 @@
 
                     ref_rc.clone();
                     ```
-    * PartialEq
-    * Sized
-        * A sized type is one whose values all have the same size in memory.
-            * every u64 takes eight bytes, every (f32, f32, f32) tuple twelve
-        * All sized types implement the std::marker::Sized trait, which has no methods or
-          associated types.
-        * Rust can’t store unsized values in variables or pass them as arguments. You can only
-          deal with them through pointers like &str or Box<dyn Write>, which themselves are
-          sized.
-        * 13-1, a pointer to an unsized value is always a fat pointer,
-          two words wide: a pointer to a slice also carries the slice’s length, and a trait object
-          also carries a pointer to a vtable of method implementations.
-        * A struct
-          type’s last field (but only its last) may be unsized, and such a struct is itself unsized.
-    * debug, display
-        1. debug vs Display
-            * The #[derive(Debug)] attribute tells the compiler to generate some extra code that
-              allows us to format the Arguments struct with {:?} in println!.
-    * FromStr
-* macros (derev)
+        * `Pin<P>`
+            * borrow checker general rule: can't move an object if it has an active reference to it
+                * problem: allow moving self referential structs
+            * ensures that the pointee of any pointer type P has a stable location in memory
+            * it cannot be moved elsewhere and its memory cannot be deallocated until it gets dropped
+                * by default, all types in Rust are movable
+            * use case
+                * self-referential struct
+                    * if the object of the struct is relocated, the value of the member variable will have a meaningless value
+                    * example: intrusive doubly-linked list
+                * to poll futures, they must be pinned
+                    * future might contain self references
+                    * you create a Future, move it around if you want, then you pin it, then you start polling it
+                        * if a Future implements Unpin then you can pin it, poll it, unpin it, move it, pin it again, poll it, unpin it, move it, and so on
+                        * if a Future does not implement Unpin, then you need to pin it once and keep it pinned forever
+            * `Unpin`
+                * cancels the effect of `Pin<P>`
+    * `Sized`
+        * types with a constant size known at compile time
+        * marker trait
+        * Rust can’t store unsized values in variables or pass them as arguments
+            * you can only deal with them through pointers like &str or Box<dyn Write> (which themselves are sized)
+        * pointer to an unsized value is always a fat pointer
+        * struct is allowed to contain a single unsized field, and this makes the struct itself unsized
 
 ## closures
 * closure may contain data
