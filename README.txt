@@ -54,6 +54,9 @@
     * https://www.reddit.com/r/rust/comments/f55ur9/fromstr_vs_fromstr_vs_fromstring_which_should_i/
     * https://stackoverflow.com/questions/67385956/what-is-the-difference-between-the-fromstr-and-tryfromstring-traits
     * https://stackoverflow.com/questions/71487308/is-there-any-real-difference-between-fromstr-and-tryfromstr
+    * https://levelup.gitconnected.com/rust-unit-structs-explained-4ad2307efa72
+    * https://stackoverflow.com/questions/67689613/what-is-a-real-world-example-of-using-a-unit-struct
+    * https://medium.com/@verbruggenjesse/rust-using-rustlings-part-6-structs-b1f3be7c2cbc
 
 1. general
     * allocates on stack by default
@@ -215,7 +218,16 @@
             d = gcd(d, m); // takes ownership
         }
         ```
+1. attributes
+    * You
+      can disable the warning by adding an #[allow] attribute on the type:
+      #[allow(non_camel_case_types)]
+    * Conditional compilation is another feature that’s written using an attribute, namely,
+      #[cfg]:
+      #[cfg(target_os = "android")]
+    * #[inline]
 1. cargo
+    1. cargo
     * Cargo.lock
         * The first time you build a
           project, Cargo outputs a Cargo.lock file that records the exact version of every crate it
@@ -321,235 +333,191 @@
               use std::prelude::v1::*;
         * In addition to functions, types, and nested modules, modules can also define con‐
           stants and statics.
-1. structs
-    * enums
-        * memory
-            * tag + enough memory to hold all fields of the largest variant
-                * example
-                    ```
-                    let circle = Shape::Circle(5.0);
-                    let rectangle = Shape::Rectangle(3.0, 4.0);
-                    let triangle = Shape::Triangle(1.0, 1.0, 1.0);
+## structs
+* three kinds
+    * named-field
+        ```
+        struct Person {
+            first_name: String,
+            last_name: String,
+        }
+        ```
+    * tuple-like
+        ```
+        struct Age(u32);
 
-                    Circle(5.0):
-                    +---------------------------+
-                    |       Variant Tag         |
-                    +---------------------------+
-                    |   Associated Data (f64)   |
-                    |                           |
-                    |                           |
-                    +---------------------------+
-
-                    Rectangle(3.0, 4.0):
-                    +---------------------------+
-                    |       Variant Tag         |
-                    +---------------------------+
-                    |   Associated Data (f64)   |
-                    |   Associated Data (f64)   |
-                    |                           |
-                    +---------------------------+
-
-                    Triangle(1.0, 1.0, 1.0):
-                    +---------------------------+
-                    |       Variant Tag         |
-                    +---------------------------+
-                    |   Associated Data (f64)   |
-                    |   Associated Data (f64)   |
-                    |   Associated Data (f64)   |
-                    +---------------------------+
-                    ```
-            * tag field is for Rust’s internal use
-                * tells which constructor created the value and therefore which fields it has.
-        * useful for quickly implementing tree-like data structures
-        * can have methods
-        * rust prohibits match expressions that do not cover all possible values
-    * Rust has three kinds of struct types, named-field, tuple-like, and unit-like,
-        * named
-            struct GrayscaleMap {
-            pixels: Vec<u8>,
-            size: (usize, usize)
+        impl Age {
+            fn new(age: u32) -> Option<Self> {
+                if age >= 0 {
+                    Some(Self(age))
+                } else {
+                    None
+                }
             }
-        * Tuple-Like
-            struct Bounds(usize, usize);
-            assert_eq!(image_bounds.0 * image_bounds.1, 786432);
-            * Tuple-like structs are good for newtypes, structs with a single component that you
-              define to get stricter type checking.
-        * Unit-Like Structs
-            * struct Onesuch;
-            * A value of such a type occupies no memory, much like the unit type ()
-    * let mut broom1 = Broom { height: b.height / 2, .. b };
-            ..b destructurization
-    * In memory, both named-field and tuple-like structs are the same thing: a collection of
-      values, of possibly mixed types, laid out in a particular way in memory.
-      * Rust doesn’t make specific promises about how it will order a
-        struct’s fields or elements in memory;
-      * Rust does promise to store fields’ values directly in the struct’s block
-        of memory.
-      * Whereas JavaScript, Python, and Java would put the pixels and size
-        values each in their own heap-allocated blocks and have GrayscaleMap’s fields point
-        at them, Rust embeds pixels and size directly in the GrayscaleMap value.
-    * An impl block is simply a collection of fn definitions, each of which becomes a
-      method on the struct type named at the top of the block.
-      pub fn push(&mut self, c: char) {
-      * Unlike C++ and Java, where the members of the “this” object are
-        directly visible in method bodies as unqualified identifiers, a Rust method must
-        explicitly use self to refer to the value it was called on, similar to the way Python
-        methods use self, and the way JavaScript methods use this.
-      pub fn split(self) -> (Vec<char>, Vec<char>) {
+        }
+        ```
+        * good for newtypes (structs with a single component)
+            * https://github.com/greyblake/nutype
+    * unit-like
+        * example: `std::fmt::Error`
+            ```
+            pub struct Error
+            ```
+        * can serve as a marker type
+        * basis for stateless trait implementation
+        * library may ask you to create a structure that implements a certain trait to handle events
+            * example
+                ```
+                // lib
+                trait EventHandler {
+                    fn handle_event(&self, event: &str);
+                }
+
+                // your code
+                struct LogHandler;
+
+                impl EventHandler for LogHandler {
+                    fn handle_event(&self, event: &str) {
+                        // Perform logging logic here
+                        println!("Log: {}", event);
+                    }
+                }
+                ```
+        * used in enums as parameterless variant
+            * example
+                ```
+                enum Animal {
+                    Cat
+                }
+                ```
+        * occupies no memory, much like the unit type ()
+* does not support field mutability at the language level
+    * mutability is a property of the binding, not of the structure itself
+        * example
+            ```
+            struct Point {
+                mut x: i32, // not compile
+                y: i32,
+            }
+            ```
+
+            ```
+            let mut point = Point { x: 0, y: 0 };
+
+            point.x = 5;
+            ```
+* contain data, but can also have logic
+    * if contains references, references’ lifetimes must be specified
+        * lifetimes on structs should only be used when the struct is a "view" or "cursor" that looks inside some other struct
+            * example: `&str` is easy for read-only function parameters, but it's a pain for structs
+                * you should never put the `&str` type in a struct (just default to `String`)
+        * rule of thumb: "Does the struct own this data?"
+            * yes => `'static` (unborrowed) fields
+            * no => you go with references
+            * shared ownership => `Rc`/`Weak`/`Arc`
+                * if it's possibly shared => `Cow`
+    * `impl` is used to tie logic to struct
+        * Rust method must explicitly use self to refer to the value it was called on
+            * similar to: Python (self), JavaScript (this)
+            * not similar to: Java (this is auto-generated by compiler)
         * if a method wants to take ownership of self, it can take self by value
-      pub fn new() -> Queue {
-        * Type-Associated Functions
-    * Although you can have many separate impl blocks for a single type, they must all be
-      in the same crate that defines that type.
-    impl Vector2 {
-    const ZERO: Vector2 = Vector2 { x: 0.0, y: 0.0 };
-    const UNIT: Vector2 = Vector2 { x: 1.0, y: 0.0 };
-    }
-    * As another shorthand,
-      every impl block, generic or not, defines the special type parameter Self (note the
-      CamelCase name) to be whatever type we’re adding methods to.
-    * if a struct type con‐
-      tains references, you must name those references’ lifetimes.
-    * A struct’s fields, even private fields, are accessible throughout the module where the
-      struct is declared, and its submodules. Outside the module, only public fields are
-      accessible.
-    * copy vs clone
-        * Assigning a value of a Copy type
-          copies the value, rather than moving it.
-          * Passing Copy types to functions
-            and constructors behaves similarly.
-        * Only types for which a simple bit-for-bit copy suffices can be Copy.
-            * As we’ve already
-              explained, String is not a Copy type, because it owns a heap-allocated buffer. For sim‐
-              ilar reasons, Box<T> is not Copy; it owns its heap-allocated referent.
-            * The File type, representing an operating system file handle, is not Copy; duplicating such a value
-                             would entail asking the operating system for another file handle.
-            * Similarly, the
-              MutexGuard type, representing a locked mutex, isn’t Copy: this type isn’t meaningful to
-              copy at all, as only one thread may hold a mutex at a time.
-            * As a rule of thumb, any type that needs to do something special when a value is drop‐
-              ped cannot be Copy: a Vec needs to free its elements, a File needs to close its file han‐
-              dle, a MutexGuard needs to unlock its mutex, and so on.
-            * By default, struct and enum types are not
-              Copy:
-              * If all the fields of your
-                struct are themselves Copy, then you can make the type Copy as well by placing the
-                attribute #[derive(Copy, Clone)] above the definition,
-              * However, if we try
-                this on a type whose fields are not all Copy, it doesn’t work.
-                #[derive(Copy, Clone)]
-                struct StringLabel { name: String }
-                // the trait `Copy` may not be implemented for this type
-                // this field does not implement `Copy`
-              * So making a type Copy represents a serious commitment
-                on the part of the implementer: if it’s necessary to change it to non-Copy later, much
-                of the code that uses it will probably need to be adapted.
-                * Copy types are very limited
-                  in which types they can contain, whereas non-Copy types can use heap allocation and
-                  own other sorts of resources.
-
-        * Clone is designed for arbitrary duplications: a Clone implementation for a type T can do arbitrarily complicated operations required to create a new T. It is a normal trait (other than being in the prelude), and so requires being used like a normal trait, with method calls, etc.
-
-          The Copy trait represents values that can be safely duplicated via memcpy: things like reassignments and passing an argument by-value to a function are always memcpys, and so for Copy types, the compiler understands that it doesn't need to consider those a move.
-        * Copy is implicit, inexpensive, and cannot be re-implemented (memcpy).
-          Clone is explicit, may be expensive, and may be re-implement arbitrarily.
-        * moves vs automatic copies
+        * example
             ```
-            #[derive(Debug, Clone, Copy)]
-            pub struct PointCloneAndCopy {
-                pub x: f64,
-            }
+            struct Age(u32);
 
-            #[derive(Debug, Clone)]
-            pub struct PointCloneOnly {
-                pub x: f64,
-            }
+            impl Age {
 
-            fn test_copy_and_clone() {
-                let p1 = PointCloneAndCopy { x: 0. };
-                let p2 = p1; // because type has `Copy`, it gets copied automatically.
-                println!("{:?} {:?}", p1, p2);
-            }
+                const ZERO: u8 = Age::new(0); // type-associated const
 
-            fn test_clone_only() {
-                let p1 = PointCloneOnly { x: 0. };
-                let p2 = p1; // because type has no `Copy`, this is a move instead; to avoid the implicit move, we could explicitly call let p2 = p1.clone();
-                println!("{:?} {:?}", p1, p2); //
+                fn new(age: u32) -> Option<Self> { // no "self", type-associated function - Age::new(5)
+                    if age >= 0 {
+                        Some(Self(age))
+                    } else {
+                        None
+                    }
+                }
+
+                fn value(&self) -> u32 { // method invoked on instance - age.value()
+                    self.0
+                }
             }
             ```
-        * The Copy trait in rust defines the ability to implicitly copy an object. The behavior Copy is not overloadable. It is always a simple bitwise copy.
-    * what to use inside struct: rule of thumb
-    * As a rule of thumb, you should never put the &str type in a struct. Lifetimes on structs should only be used when the struct is a "view" or "cursor" that looks inside some other struct, which is not what is happening here.
-    * You need to ask yourself "Does the struct own this data?". If so, you go with 'static (unborrowed) fields and if not, you go with references. If ownership is shared, you go with Rc/Weak/Arc depending on the kind of ownership. And if it's possibly shared, you go with Cow.
-    * I'd just default to String for struct fields (unless it's a constant string literal so that you can use &'static str. &str is easy for read-only function parameters, but it's a pain for structs, so I generally only use it if I really need it.
-1. error: unrecoverable: panic, recoverable: result
-    * In Rust, panic is safe and per
-      thread. The boundaries between threads serve as a firewall for panic; panic doesn’t
-      automatically spread from one thread to the threads that depend on it. Instead, a
-      panic in one thread is reported as an error Result in other threads. The program as a
-      whole can easily recover.
-    * // Errors should implement the std::error::Error trait,
-      // but the default definitions for the Error methods are fine.
-      impl std::error::Error for JsonError { }
-    * The #[derive(Error)] directive tells thiserror to generate the code shown earlier,
-      which can save a lot of time and effort.
-    ```
-    let output = match File::create(filename) {
-    Ok(f) => f,
-    Err(e) => {
-    return Err(e);
-    }
-    };
-    ```
-    vs
-    ```
-    let output = File::create(filename)?;
-    ```
-    This kind of match statement is such a common pattern in Rust that the language
-    provides the ? operator as shorthand for the whole thing.
-    * Panic
-        * Panic is for the other kind of error, the kind that should never happen.
-        * • Calling .expect() on a Result that happens to be Err
-        * Integer division by zero
-        * (There’s also the macro panic!(), for cases where your own code discovers that it has
-          gone wrong, and you therefore need to trigger a panic directly. panic!() accepts
-          optional println!()-style arguments, for building an error message.)
-        * A good rule of thumb is: “Don’t panic.”
-        * It’s more like a RuntimeException in Java
-        * Panic is per thread. One thread can be panicking while other threads are going on
-          about their normal business.
-          * If the panicking thread was the main thread, then the
-            whole process exits (with a nonzero exit code).
-        * There is also a way to catch stack unwinding, allowing the thread to survive and con‐
-          tinue running.
-            * The standard library function std::panic::catch_unwind() does
-              this.
-            * this is the mechanism used by Rust’s test har‐
-              ness to recover when an assertion fails in a test.
-    * Aborting
-        * Also, Rust’s panic behavior is customizable. If you compile with -C panic=abort, the
-          first panic in your program immediately aborts the process.
-    * Result
-        * fn get_weather(location: LatLng) -> Result<WeatherReport, io::Error>
-        * Rust’s equivalent of try/catch in other languages
-            match get_weather(hometown) {
-            Ok(report) => {
-            display_weather(hometown, &report);
-            }
-            Err(err) => {
-            println!("error querying the weather: {}", err);
-            schedule_weather_retry();
-            }
-            }
-1. cargo
-1. attributes
-    * You
-      can disable the warning by adding an #[allow] attribute on the type:
-      #[allow(non_camel_case_types)]
-    * Conditional compilation is another feature that’s written using an attribute, namely,
-      #[cfg]:
-      #[cfg(target_os = "android")]
-    * #[inline]
+* accessibility
+    * module where the struct is declared, and its submodules: full access
+        * even to private fields
+    * outside the module, only `pub` fields are accessible
+* by default, struct and enum types are not Copy
+    * all the fields of struct Copy <=> copy can be derived for struct
+* memory
+    * both named-field and tuple-like structs are the same thing: collection of
+    values laid out in a particular way in memory
+    * Rust doesn’t make specific promises about how it will order a struct’s fields or elements in memory
+    * Rust does promise to store fields’ values directly in the struct’s block of memory
+        * Java would put values each in their own heap-allocated blocks and have struct fields point
+        at them
+* enums
+    * memory
+        * tag + enough memory to hold all fields of the largest variant
+            * example
+                ```
+                let circle = Shape::Circle(5.0);
+                let rectangle = Shape::Rectangle(3.0, 4.0);
+                let triangle = Shape::Triangle(1.0, 1.0, 1.0);
+
+                Circle(5.0):
+                +---------------------------+
+                |       Variant Tag         |
+                +---------------------------+
+                |   Associated Data (f64)   |
+                |                           |
+                |                           |
+                +---------------------------+
+
+                Rectangle(3.0, 4.0):
+                +---------------------------+
+                |       Variant Tag         |
+                +---------------------------+
+                |   Associated Data (f64)   |
+                |   Associated Data (f64)   |
+                |                           |
+                +---------------------------+
+
+                Triangle(1.0, 1.0, 1.0):
+                +---------------------------+
+                |       Variant Tag         |
+                +---------------------------+
+                |   Associated Data (f64)   |
+                |   Associated Data (f64)   |
+                |   Associated Data (f64)   |
+                +---------------------------+
+                ```
+        * tag field is for Rust’s internal use
+            * tells which constructor created the value and therefore which fields it has.
+    * useful for quickly implementing tree-like data structures
+    * can have methods
+    * rust prohibits match expressions that do not cover all possible values
+## error handling
+* panic
+    * kind of error that should never happen
+        * example: integer division by zero
+        * like a RuntimeException in Java
+    * doesn’t automatically spread from one thread to the threads that depend on it
+        * panic in one thread is reported as an error Result in other threads
+        * if the panicking thread was the main thread => whole process exits (with a nonzero exit code)
+    * behavior is customizable
+        * compile with -C panic=abort => first panic in the program immediately aborts the process
+    * macro `panic!()` triggers a panic directly
+        * a good rule of thumb is: "Don’t panic."
+    * `std::panic::catch_unwind()`
+        * catch stack unwinding
+        * allowing the thread to survive and continue running
+        * example: mechanism used by Rust’s test harness to recover when an assertion fails in a test
+* errors
+    * should implement the `std::error::Error` trait
+        * can be derived: #[derive(Error)]
+* Result
+    * equivalent of Either
+    * equivalent of try/catch in other languages
 
 ## traits
 * Rust’s take on interfaces
@@ -1580,16 +1548,19 @@
         ```
     * `main()` can also return `Result`
 * `?` operator
-    * example
-        ```
-        ```
-    * shorthand for a match expression
-        ```
-        let output = match File::create(filename) {
-            Ok(f) => f,
-            Err(err) => return Err(err)
-        };
-        ```
+    * can only be applied to the types Result<T, E> and Option<T>
+    * unwraps valid values or returns erroneous values
+        * example
+            ```
+            let output = File::create(filename)?
+            ```
+            is equivalent to
+            ```
+            let output = match File::create(filename) {
+                Ok(f) => f,
+                Err(err) => return Err(err)
+            };
+            ```
 * dot
     * The unary * operator is used to access the value pointed to by a reference. As we’ve
       seen, Rust automatically follows references when you use the . operator to access a
