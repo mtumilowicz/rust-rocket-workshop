@@ -57,6 +57,8 @@
     * https://levelup.gitconnected.com/rust-unit-structs-explained-4ad2307efa72
     * https://stackoverflow.com/questions/67689613/what-is-a-real-world-example-of-using-a-unit-struct
     * https://medium.com/@verbruggenjesse/rust-using-rustlings-part-6-structs-b1f3be7c2cbc
+    * https://www.reddit.com/r/rust/comments/ny44z6/how_would_you_further_organize_the_project/
+    * https://stackoverflow.com/questions/57756927/rust-modules-confusion-when-there-is-main-rs-and-lib-rs
 
 1. general
     * allocates on stack by default
@@ -68,6 +70,14 @@
         * As long as a different, unpredictable key is used for each hash table, Rust is secure
           against a kind of denial-of-service attack called HashDoS, where attackers deliber‐
           ately use hash collisions to trigger worst-case performance in a server.
+1. attributes
+    * You
+      can disable the warning by adding an #[allow] attribute on the type:
+      #[allow(non_camel_case_types)]
+    * Conditional compilation is another feature that’s written using an attribute, namely,
+      #[cfg]:
+      #[cfg(target_os = "android")]
+    * #[inline]
 1. ownership and borrowing
     * In
       Java, if class Rectangle contains a field Vector2D upperLeft;, then upperLeft is a
@@ -218,121 +228,164 @@
             d = gcd(d, m); // takes ownership
         }
         ```
-1. attributes
-    * You
-      can disable the warning by adding an #[allow] attribute on the type:
-      #[allow(non_camel_case_types)]
-    * Conditional compilation is another feature that’s written using an attribute, namely,
-      #[cfg]:
-      #[cfg(target_os = "android")]
-    * #[inline]
-1. cargo
-    1. cargo
-    * Cargo.lock
-        * The first time you build a
-          project, Cargo outputs a Cargo.lock file that records the exact version of every crate it
-          used.
-        * Later builds will consult this file and continue to use the same versions.
-        * if your project is an executable, you should commit Cargo.lock to ver‐
-          sion control.
-          * That way, everyone who builds your project will consistently get the
-            same versions.
-        * If your project is an ordinary Rust library, don’t bother committing Cargo.lock. Your
-          library’s downstream users will have Cargo.lock files that contain version information
-          for their entire dependency graph; they will ignore your library’s Cargo.lock file.
-        * reason
-            * The version numbers in Cargo.toml are deliberately flexible, yet we don’t want Cargo
-              to upgrade us to the latest library versions every time we build. Imagine being in the
-              middle of an intense debugging session when suddenly cargo build upgrades you to
-              a new version of a library.
-    * When you write something like image = "0.13.0" in your Cargo.toml file, Cargo
-      interprets this rather loosely.
-      * It uses the most recent version of image that is consid‐
-        ered compatible with version 0.13.0.
-      * Suppose one library, libA, used
-        num = "0.1.31" while another, libB, used num = "0.1.29". If version numbers
-        required exact matches, no project would be able to use those two libraries together.
-        Allowing Cargo to use any compatible version is a much more practical default.
-    * Each crate is a complete, cohesive unit: all the
-      source code for a single library or executable, plus any associated tests, examples,
-
-      tools, configuration, and other junk.
-    * Cargo.toml
-        [dependencies]
-        num = "0.4"
-        image = "0.13"
-        crossbeam = "0.8"
-    * use num::Complex;
-      // ...
-      use image::ColorType;
-      use image::png::PNGEncoder;
-    * We found these crates on crates.io, the Rust community’s site for open
-      source crates.
-    * transitive dependencies
-    * To evolve without breaking existing code, Rust uses editions.
-        * The 2015 edition of Rust
-          is compatible with Rust 1.0. The 2018 edition changed async and await into key‐
-          words, streamlined the module system, and introduced various other language
-          changes that are incompatible with the 2015 edition.
-        * programs can freely mix crates written in different editions.
-            * It’s even fine for a
-              2015 edition crate to depend on a 2018 edition crate.
-            * In other words, a crate’s edition
-              only affects how its source code is construed; edition distinctions are gone by the
-              time the code has been compiled.
-            * This means there’s no pressure to update old crates
-              just to continue to participate in the modern Rust ecosystem.
+## cargo
+* package manager and build tool
+    * vs sbt
+        * sbt = treat configuration as a code
+        * cargo = treat configuration as data
+* command-line tool
+    * useful commands
+        * `cargo build` = produces the executable or library specified in your project's configuration
+        * `cargo run` = builds and then runs project
+            * entry point to be used is `main.rs`
+        * `cargo test` = executes the tests in your project
+        * `cargo check` = check project for errors and warnings without producing executable
+        * `cargo tree` = tree-like representation of dependencies
+            * including transitive dependencies (dependencies of dependencies)
+        * `cargo install` = install binaries from crates.io
+            * `crates.io` = community’s site for open source crates
+            * used for installing command-line tools or utilities
+            * `cargo-edit` package provides additional Cargo commands for managing dependencies
+                * `cargo add <dependency-name>` = add a new dependency to Cargo.toml
+                * `cargo rm <dependency-name>` = remove a dependency
+* `Cargo.toml`
+    * configuration file
+        * resides at the root of project
+    * contains metadata about project
+        * example: dependencies, build settings, etc
+    * TOML (Tom's Obvious Minimal Language)
+        * data serialization language
+        * organized into key-value pairs
+    * loose interpretation of version specifications
+        * Cargo looks for the most recent version of the image crate that is considered compatible with version
+        * reason: allowing Cargo to use any compatible version is a much more practical default
+            * othwerise it would lead to situations where projects couldn't use multiple libraries with slightly different versions of shared dependencies
+    * example
+        ```
         [package]
-      name = "rust-rocket-workshop"
-      version = "0.1.0"
-      edition = "2021"
-    * modules
-        * They act as Rust’s namespaces, containers for the func‐
-          tions, types, constants, and so on that make up your Rust program or library.
-        * mod spores {
+        name = "my_project"
+        version = "0.1.0"
+        edition = "2021" // Ruse edition
 
-          }
-        * The pub keyword makes an item public, so it can be
-          accessed from outside the module.
-        * One function is marked pub(crate), meaning that it is available anywhere inside this
-          crate, but isn’t exposed as part of the external interface.
-          * It can’t be used by other
-            crates, and it won’t show up in this crate’s documentation.
-        * Anything that isn’t marked pub is private and can only be used in the same module in
-          which it is defined, or any child modules:
-        * Modules can nest, and it’s fairly common to see a module that’s just a collection of
-          submodules
-        * It’s also possible to specify pub(super), making an item visible to the parent module
-          only, and pub(in <path>), which makes it visible in a specific parent module and its
-          descendants.
-        * A module can have its own directory. When Rust sees mod spores;, it checks for
-          both spores.rs and spores/mod.rs; if neither file exists, or both exist, that’s an error.
-        * These three options—modules in their own file, modules in their own directory with
-          a mod.rs, and modules in their own file with a supplementary directory containing
-          submodules
-        * The :: operator is used to access features of a module.
-            std::mem::swap(&mut s1, &mut s2);
-            * std is the name of the standard library.
-            * The alternative is to import features into
-              the modules where they’re used:
-              use std::mem;
-              mem::swap(&mut s1, &mut s2);
-        * use crate::proteins::AminoAcid; // explicitly import relative to crate root
-        * Modules aren’t the same thing as files, but there is a natural analogy between modules
-          and the files and directories of a Unix filesystem.
-            * The use keyword creates aliases, just
-              as the ln command creates links.
-            * Paths, like filenames, come in absolute and relative
-              forms. self and super are like the . and .. special directories.
-        * For one thing, the standard library std is automatically linked with every project.
-            * Furthermore, a few particularly
-              handy names, like Vec and Result, are included in the standard prelude and automat‐
-              ically imported.
-            * Rust behaves as though every module, including the root module,
-              started with the following import:
-              use std::prelude::v1::*;
-        * In addition to functions, types, and nested modules, modules can also define con‐
-          stants and statics.
+        [dependencies]
+        uuid = { version = "1.6.1", features = ["v4"] }
+
+        [build-dependencies] // used only during the build process (e.g., build scripts)
+
+        [dev-dependencies] // used only for testing and development
+        ```
+        * Rust editions
+            * represent different releases of the Rust programming language
+            * example
+                * 2015 edition was the first stable release
+                * 2018 edition changed async and await into keywords, streamlined the module system, and introduced
+                various other language changes
+                    * incompatible with the 2015 edition
+            * used to evolve without breaking existing code
+                * are backward-compatible
+                    * code written in earlier editions should still compile and work in newer editions
+            * programs can freely mix crates written in different editions
+                * crate’s edition only affects how its source code is construed
+                    * edition distinctions are gone by the time the code has been compiled
+                    * there’s no pressure to update old crates just to continue to participate in the modern Rust ecosystem
+                * example: fine for a 2015 edition crate to depend on a 2018 edition crate
+* `Cargo.lock`
+    * example
+        ```
+        [[package]]
+        name = "uuid"
+        version = "1.6.1"
+        source = "registry+https://github.com/rust-lang/crates.io-index"
+        checksum = "5e395fcf16a7a3d8127ec99782007af141946b4795001f876d54fb0d55978560"
+        dependencies = [
+         "getrandom",
+        ]
+        ```
+    * records the exact version of every crate it used
+        * generated during first time build
+    * builds consult this file and continue to use the same versions
+    * should commit?
+    * project is an executable => commit
+        * everyone will consistently get the same versions
+    * library => don't make much sense to commit
+        * downstream users will have `Cargo.lock` files that contain version information
+        for their entire dependency graph
+            * library’s Cargo.lock file will be ignored
+    * reason
+        * version numbers in Cargo.toml are deliberately flexible
+            * yet we don’t want Cargo to upgrade us to the latest library versions every time we build
+                * example: in the middle of an intense debugging session
+* modules
+    * Rust’s namespaces
+        * containers for the functions, types, constants, etc
+    * defined using two equivalent approaches
+        * modules in their own file
+            * example
+                ```
+                mod customer {
+
+                }
+                ```
+        * modules in their own directory with a `mod.rs`
+            * example
+                * file `customer.rs`
+                * `mod.rs`
+                    ```
+                    pub mod customer;
+                    ```
+        * example: when Rust sees `mod customer;`, it checks for both
+            * `customer.rs` and `customer/mod.rs`
+                * if neither file exists, or both exist, that’s an error
+    * `::` operator
+        * used to access features of a module
+        * example: `std::mem::swap(&mut s1, &mut s2)`
+    * `lib.rs`
+        * usual workflow is to make the binary something like a thin wrapper around the library
+            * example
+                ```
+                fn main() {
+                    library::main();
+                }
+                ```
+        * when you import the library, the entry point is `lib.rs`
+        * use case: common definitions
+            * example
+                ```
+                pub mod foo;
+                pub mod bar;
+                ```
+        * vs `main.rs`
+            * `main.rs` is binary
+            * `lib.rs` is library
+    * `use`
+        * bring symbols (such as functions, structs, enums, and modules) into scope
+        * example
+            ```
+            use std::mem::swap;
+
+            fn main() {
+                swap(&mut a, &mut b);
+            }
+            ```
+        * `use crate`
+            * used to bring items from the current crate's root module into scope
+            * `crate` refers to `src/lib.rs`
+            * example
+                ```
+                my_project/
+                |-- src/
+                |   |-- lib.rs // exposes sub_module
+                |   |-- sub_module.rs // defines my_function
+                |-- main.rs // imports my_function with use crate::my_function
+                ```
+    * anything that isn’t marked pub is private
+        * can only be used in the same module in which it is defined, or any child modules
+        * `pub` keyword makes an item public
+        * `pub(crate)` makes item available anywhere inside this crate
+            * isn’t exposed as part of the external interface
+            * can’t be used by other crates
+            * won’t show up in this crate’s documentation
+    * can be nested
 ## structs
 * three kinds
     * named-field
