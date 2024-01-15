@@ -60,54 +60,61 @@
     * https://www.reddit.com/r/rust/comments/ny44z6/how_would_you_further_organize_the_project/
     * https://stackoverflow.com/questions/57756927/rust-modules-confusion-when-there-is-main-rs-and-lib-rs
 
-1. general
-    * allocates on stack by default
-    * to test online: https://play.rust-lang.org/
-    * Rust’s default hashing algorithm is a well-known algorithm called SipHash-1-3.
-      SipHash is fast, and it’s very good at minimizing hash collisions.
-        * In fact, it’s a crypto‐
-          graphic algorithm: there’s no known efficient way to generate SipHash-1-3 collisions.
-        * As long as a different, unpredictable key is used for each hash table, Rust is secure
-          against a kind of denial-of-service attack called HashDoS, where attackers deliber‐
-          ately use hash collisions to trigger worst-case performance in a server.
-1. attributes
-    * You
-      can disable the warning by adding an #[allow] attribute on the type:
-      #[allow(non_camel_case_types)]
-    * Conditional compilation is another feature that’s written using an attribute, namely,
-      #[cfg]:
-      #[cfg(target_os = "android")]
-    * #[inline]
-1. ownership and borrowing
+
+## general
+* Rust is a statically typed language
+* Rust code uses snake case
+* Rust to make memory safety guarantees without needing a garbage collector
+* Pushing to the stack is faster than allocating on the heap because the allocator never has to search for a place to store new data; that location is always at the top of the stack.
+* Accessing data in the heap is slower than accessing data on the stack because you have to follow a pointer to get there.
+
+## ownership and borrowing
+* ownership
+    * a set of rules that govern how a Rust program manages memory
+    * memory is managed through a system of ownership with a set of rules that the compiler checks
+    * rules
+        * Each value in Rust has an owner.
+        * There can only be one owner at a time.
+        * When the owner goes out of scope, the value will be dropped.
+            * scope is the range within a program for which an item is valid
+* References and Borrowing
+    * reference is like a pointer in that it’s an address we can follow to access the data stored at that address
+        * that data is owned by some other variable
+        * Unlike a pointer, a reference is guaranteed to point to a valid value of a particular type for the life of that reference
+    * We call the action of creating a reference borrowing
+    * Just as variables are immutable by default, so are references. We’re not allowed to modify something we have a reference to.
+    * mutable reference
+    * Mutable references have one big restriction: if you have a mutable reference to a value, you can have no other references to that value.
+    * Rust can prevent data races at compile time. A data race is similar to a race condition and happens when these three behaviors occur:
+
+      Two or more pointers access the same data at the same time.
+      At least one of the pointers is being used to write to the data.
+      There’s no mechanism being used to synchronize access to the data.
+    * compiler guarantees that references will never be dangling references
+        * if you have a reference to some data, the compiler will ensure that the data will not go out of scope before the reference to the data does
+
+* The Rust compiler guarantees that when you state that a value won’t change, it really won’t change, so you don’t have to keep track of it yourself
+* Although variables are immutable by default, you can make them mutable by adding mut in front of the variable name
+* Rust checks at compile time to ensure that
+                          you’re using the reference safely. If the checks fail, you get a compiler error.
+* Rust’s borrow system can’t protect you from deadlock
+    * best protection is to keep critical sections small
+
+    * Every value has a single owner that determines its
+      lifetime.
+      * When the owner is freed—dropped, in Rust terminology—the owned value is
+        dropped too.
+    * A variable owns its value.
+      * When control leaves the block in which the variable is
+        declared, the variable is dropped, so its value is dropped along with it.
+
+
     * In
       Java, if class Rectangle contains a field Vector2D upperLeft;, then upperLeft is a
       reference to another separately created Vector2D object. Objects never physically
       contain other objects in Java.
-    * Rust’s borrow system can’t protect
-      you from deadlock.
-      * The best protection is to keep critical sections small: get in, do
-        your work, and get out.
-    * Paring these principles down to the simplest possible examples:
-      let mut x = 10;
-      let r1 = &x;
-      let r2 = &x; // ok: multiple shared borrows permitted
-      x += 10; // error: cannot assign to `x` because it is borrowed
-      let m = &mut x; // error: cannot borrow `x` as mutable because it is
-      // also borrowed as immutable
-      println!("{}, {}, {}", r1, r2, m); // the references are used here,
-      // so their lifetimes must last
-      // at least this long
 
-      let mut y = 20;
-      let m1 = &mut y;
-      let m2 = &mut y; // error: cannot borrow as mutable more than once
-      let z = y; // error: cannot use `y` because it was mutably borrowed
-    • You can move values from one owner to another. This allows you to build,
-    rearrange, and tear down the tree.
-    • Very simple types like integers, floating-point numbers, and characters are
-    excused from the ownership rules. These are called Copy types.
-    • The standard library provides the reference-counted pointer types Rc and Arc,
-    which allow values to have multiple owners, under some restrictions.
+
     * returns a value referencing data owned by the current function
         * How to return a reference to a value from Hashmap wrappered in Arc and Mutex in Rust?
         ```
@@ -126,109 +133,23 @@
         }
         ```
         * If that return type were allowed to point inside the Mutex's data, there would be nothing stopping other code from locking the mutex and deleting the entry, meaning that the returned reference would point at something that was deallocated
-        * If it's allowed, the map might change due to the operation from another thread, and it's UB
-            * A reference-counting loop; these objects will not be freed
-                * It is possible to leak values in Rust this way, but such situations are rare. You cannot
-                  create a cycle without, at some point, making an older value point to a newer value.
-                  This obviously requires the older value to be mutable. Since Rc pointers hold their
-                  referents immutable, it’s not normally possible to create a cycle.
-                  * interior mutability
-                    * If you com‐
-                      bine those techniques with Rc pointers, you can create a cycle and leak memory.
-                    * You can sometimes avoid creating cycles of Rc pointers by using weak pointers,
-                      std::rc::Weak, for some of the links instead.
-                    * What we need is a little bit of mutable
-                      data (a File) inside an otherwise immutable value (the SpiderRobot struct).
-                    * Rust offers several flavors of it; in this section, we’ll discuss
-                      the two most straightforward types: Cell<T> and RefCell<T>, both in the std::cell
-                      module.
-                      * A Cell<T> is a struct that contains a single private value of type T. The only special
-                        thing about a Cell is that you can get and set the field even if you don’t have mut
-                        access to the Cell itself:
-                        fn set(&self, value: T) // note: not `&mut self`
-                        this one unusual detail is the whole point of Cells.
-                      * Unlike Cell, RefCell supports borrowing refer‐
-                        ences to its T value:
-                        ref_cell.borrow()
-                        Returns a Ref<T>, which is essentially just a shared reference to the value stored
-                        in ref_cell.
-                        This method panics if the value is already mutably borrowed; see details to fol‐
-                        low.
-                        ref_cell.borrow_mut()
-                        Returns a RefMut<T>, essentially a mutable reference to the value in ref_cell.
-                        This method panics if the value is already borrowed; see details to follow.
-                        ref_cell.try_borrow(), ref_cell.try_borrow_mut()
-                        Work just like borrow() and borrow_mut(), but return a Result. Instead of pan‐
-                        icking if the value is already mutably borrowed, they return an Err value.
-                      * The only difference is that normally,
-                        when you borrow a reference to a variable, Rust checks at compile time to ensure that
-                        you’re using the reference safely. If the checks fail, you get a compiler error. RefCell
-                        enforces the same rule using run-time checks.
-                      * The other drawback is less obvious and more serious: cells—and any types
-                        that contain them—are not thread-safe.
-                        * Rust therefore will not allow multiple threads
-                          to access them at once.
-    • You can “borrow a reference” to a value; references are non-owning pointers,
-    with limited lifetimes.
-    * moves
-        * In Rust, for most types, operations like assigning a value to a variable, passing it to a
-          function, or returning it from a function don’t copy the value: they move it.
-        * The
-          source relinquishes ownership of the value to the destination and becomes uninitial‐
-          ized; the destination now controls the value’s lifetime.
-        * in Rust, assignments of most types move the value from the source to
-          the destination, leaving the source uninitialized.
-            let s = vec!["udon".to_string(), "ramen".to_string(), "soba".to_string()];
-            let t = s;
-            let u = s;
-        * Passing arguments to functions moves ownership to the function’s parameters;
-        * returning a value from a
-          function moves ownership to the caller.
-        * First, the moves always apply to the value proper, not the heap storage
-          they own.
-          * For vectors and strings, the value proper is the three-word header alone; the
-            potentially large element arrays and text buffers sit where they are in the heap.
-        * Sec‐
-          ond, the Rust compiler’s code generation is good at “seeing through” all these moves;
-          in practice, the machine code often stores the value directly where it belongs.
-        * Rust
-          suggests using a reference, in case you want to access the element without moving it.
-          ```
-          let mut v = Vec::new();
-          for i in 101 .. 106 {
-          v.push(i.to_string());
-          }
-          // Pull out random elements from the vector.
-          // For this to work, Rust would somehow need to remember that the third and fifth ele‐
-             ments of the vector have become uninitialized, and track that information until the
-             vector is dropped.
-          let third = v[2]; // error: Cannot move out of index of Vec
-          let fifth = v[4]; // here too
-          ```
-    * Every value has a single owner that determines its
-      lifetime.
-      * When the owner is freed—dropped, in Rust terminology—the owned value is
-        dropped too.
-    * A variable owns its value.
-      * When control leaves the block in which the variable is
-        declared, the variable is dropped, so its value is dropped along with it.
-    * example
-        borrow
-        ```
-        let numbers = vec![10, 20, 30, 40, 50];
-        let mut d = numbers[0];
-
-        for m in &numbers[1..] { // borrow
-            d = gcd(d, *m); // borrow
-        }
-        ```
-        vs (move)
-        ```
-        for m in numbers[1..] { // drains numbers
-            d = gcd(d, m); // takes ownership
-        }
-        ```
 ## cargo
+* crate is the smallest amount of code that the Rust compiler considers at a time
+    * example: single source code file
+    * can contain modules defined in other files
+    * two forms
+        * binary crate
+            * programs you can compile to an executable
+            * have a function `main` that defines what happens when the executable runs
+            * example: command-line program, server
+        * library crate
+            * doesn't have a main function
+            * don’t compile to an executable
+            * define functionality intended to be shared with multiple projects
+* package is a bundle of one or more crates that provides a set of functionality
+    * contains a Cargo.toml
+    * example: Cargo
+        * package that contains the binary crate for the command-line tool
 * package manager and build tool
     * vs sbt
         * sbt = treat configuration as a code
@@ -236,12 +157,15 @@
 * command-line tool
     * useful commands
         * `cargo build` = produces the executable or library specified in your project's configuration
+            * `cargo build --release` = compile it with optimizations
+                * command will create an executable in target/release instead of target/debug
         * `cargo run` = builds and then runs project
             * entry point to be used is `main.rs`
         * `cargo test` = executes the tests in your project
         * `cargo check` = check project for errors and warnings without producing executable
         * `cargo tree` = tree-like representation of dependencies
             * including transitive dependencies (dependencies of dependencies)
+        * `cargo update` = ignore the Cargo.lock and figure out the latest versions that fit specifications
         * `cargo install` = install binaries from crates.io
             * `crates.io` = community’s site for open source crates
             * used for installing command-line tools or utilities
@@ -259,7 +183,7 @@
     * loose interpretation of version specifications
         * Cargo looks for the most recent version of the image crate that is considered compatible with version
         * reason: allowing Cargo to use any compatible version is a much more practical default
-            * othwerise it would lead to situations where projects couldn't use multiple libraries with slightly different versions of shared dependencies
+            * otherwise it would lead to situations where projects couldn't use multiple libraries with slightly different versions of shared dependencies
     * example
         ```
         [package]
@@ -268,7 +192,7 @@
         edition = "2021" // Ruse edition
 
         [dependencies]
-        uuid = { version = "1.6.1", features = ["v4"] }
+        uuid = { version = "1.6.1", features = ["v4"] } // "1.6.1" is shortcut for "^1.6.1"
 
         [build-dependencies] // used only during the build process (e.g., build scripts)
 
@@ -340,24 +264,22 @@
         * used to access features of a module
         * example: `std::mem::swap(&mut s1, &mut s2)`
     * `lib.rs`
+        * `src/main.rs` and `src/lib.rs` are called crate roots
+            * contents of either of these two files form a module named `crate` at the root of the crate’s module structure
+        * vs `main.rs`
+            * `main.rs` is binary
+            * `lib.rs` is library
         * usual workflow is to make the binary something like a thin wrapper around the library
             * example
                 ```
                 fn main() {
-                    library::main();
+                    library::main(); // binary crate becomes a user of the library crate
                 }
                 ```
-        * when you import the library, the entry point is `lib.rs`
-        * use case: common definitions
-            * example
-                ```
-                pub mod foo;
-                pub mod bar;
-                ```
-        * vs `main.rs`
-            * `main.rs` is binary
-            * `lib.rs` is library
     * `use`
+        * analogy: filesystem’s directory tree
+            * we use a path in the same way we use a path when navigating a filesystem
+            * `use` and a `path` in a scope is similar to creating a symbolic link in the filesystem
         * bring symbols (such as functions, structs, enums, and modules) into scope
         * example
             ```
@@ -376,7 +298,7 @@
                 |-- src/
                 |   |-- lib.rs // exposes sub_module
                 |   |-- sub_module.rs // defines my_function
-                |-- main.rs // imports my_function with use crate::my_function
+                |-- main.rs // imports my_function with `use crate::my_function`
                 ```
     * anything that isn’t marked pub is private
         * can only be used in the same module in which it is defined, or any child modules
@@ -474,6 +396,9 @@
             * similar to: Python (self), JavaScript (this)
             * not similar to: Java (this is auto-generated by compiler)
         * if a method wants to take ownership of self, it can take self by value
+            * method that takes ownership is rare
+            * usually used when the method transforms self into something else and you want to prevent the caller
+            from using the original instance after the transformation
         * example
             ```
             struct Age(u32);
@@ -735,6 +660,8 @@
                     let p2 = p1; // because type has no `Copy`, this is a move instead.
                 }
                 ```
+                * note that we need move, otherwise we would have two pointers p1 and p2 that when go out of scope,
+                they will both try to free the same memory
         * is a property of the type, not the operation
             * `let a = b` is always a move, doesn't matter whether `b` is `Copy` or not
             *  similarly, a function call `f(b)` always moves `b`
@@ -768,7 +695,7 @@
                     * you copy n bytes, where n = size of file
                 * &self/&mut self = moving an inode pointer]
                     * you copy m bytes where m = address (typically disk+sector)
-        * use for "plain old data" that doesn't contain any heap allocations
+        * use for "plain old data" that are stored on the stack and doesn't contain any heap allocations
             * however, it could be prudent to omit the `Copy` implementation, to avoid a breaking API change
         * how to force a move of a type which implements the Copy trait?
             * question does not make sense - it is always move
@@ -1471,6 +1398,9 @@
         * value is moved into the vector
 * usually are not not Copy
     * they can’t be, since they owns a dynamically allocated table
+* array
+    * have a fixed length (known at compile time)
+    * useful when you want your data allocated on the stack rather than the heap
 * `Vec<T>`
     * memory
         * three fields
@@ -1627,6 +1557,13 @@
 * destructuring
     ```
     let Track { album, track_number, title, .. } = song;
+    ```
+* struct update syntax
+    ```
+    let user2 = User {
+        email: String::from("another@example.com"),
+        ..user1 // move, user1 will no be available if some fields were moved and are not copy
+    };
     ```
 
 ## testing
