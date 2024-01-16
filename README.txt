@@ -59,7 +59,10 @@
     * https://medium.com/@verbruggenjesse/rust-using-rustlings-part-6-structs-b1f3be7c2cbc
     * https://www.reddit.com/r/rust/comments/ny44z6/how_would_you_further_organize_the_project/
     * https://stackoverflow.com/questions/57756927/rust-modules-confusion-when-there-is-main-rs-and-lib-rs
-
+    * https://stackoverflow.com/questions/30177395/when-does-a-closure-implement-fn-fnmut-and-fnonce
+    * https://stackoverflow.com/questions/50135871/how-can-a-closure-using-the-move-keyword-create-a-fnmut-closure
+    * https://users.rust-lang.org/t/fnonce-closure-can-be-called-multiple-times/53790/6
+    * https://stackoverflow.com/questions/51698648/why-is-the-move-keyword-not-always-needed-even-when-the-closure-takes-ownership
 
 ## general
 * Rust is a statically typed language
@@ -268,7 +271,9 @@
             * contents of either of these two files form a module named `crate` at the root of the crate’s module structure
         * vs `main.rs`
             * `main.rs` is binary
+                * handles running the program
             * `lib.rs` is library
+                * handles all the logic
         * usual workflow is to make the binary something like a thin wrapper around the library
             * example
                 ```
@@ -475,6 +480,12 @@
     * can have methods
     * rust prohibits match expressions that do not cover all possible values
 ## error handling
+* two categories
+    * recoverable
+        * example: file not found error
+    * unrecoverable
+        * always symptoms of bugs
+        * example: trying to access a location beyond the end of an array
 * panic
     * kind of error that should never happen
         * example: integer division by zero
@@ -486,10 +497,20 @@
         * compile with -C panic=abort => first panic in the program immediately aborts the process
     * macro `panic!()` triggers a panic directly
         * a good rule of thumb is: "Don’t panic."
-    * `std::panic::catch_unwind()`
-        * catch stack unwinding
-        * allowing the thread to survive and continue running
-        * example: mechanism used by Rust’s test harness to recover when an assertion fails in a test
+    * unwinding
+        * means Rust walks back up the stack and cleans up the data from each function it encounters
+        * is a lot of work
+        * aborting
+            * immediately ends the program without cleaning up
+            * configurable
+                ```
+                [profile.release]
+                panic = 'abort'
+                ```
+        * `std::panic::catch_unwind()`
+            * catch stack unwinding
+            * allowing the thread to survive and continue running
+            * example: mechanism used by Rust’s test harness to recover when an assertion fails in a test
 * errors
     * should implement the `std::error::Error` trait
         * can be derived: #[derive(Error)]
@@ -505,6 +526,7 @@
         * static
             * not something Go or Java have
             * perform using monomorphization
+                * process of turning generic code into specific code by filling in the concrete types that are used when compiled
                 * example
                     ```
                     impl Foo for u8 { ... }
@@ -556,8 +578,9 @@
             appropriate vtable, turning the regular pointer into a fat pointer
 * orphan rule
     * when implementing a trait, either the trait or the type must be new in the current crate
+    * without the rule, two crates could implement the same trait for the same type, and Rust wouldn’t know which implementation to use
     * example: can't `impl Write for u8`
-        * both are defined in the standard library.
+        * both are defined in the standard library
 * `Self` type represents the concrete type implementing that trait
     * example
         ```
@@ -568,9 +591,17 @@
 * two ways of using traits to write polymorphic code
     * trait objects
     * generics
-* `impl Trait` can be used in two locations
+* `impl Trait` can be used in three locations
     * as an argument type
-
+        * example
+            * `pub fn notify(item: &(impl Summary + Display))`
+            * `pub fn notify<T: Summary + Display>(item: &T)`
+            * where clause
+                ```
+                fn some_function<T, U>(t: &T) -> i32
+                where
+                    T: Summary + Display,
+                ```
     * as a return type, but concrete type needs to be known at compile time
         * concrete types of iterators could become very complex
             ```
@@ -591,8 +622,11 @@
                 }
                 ```
             * solution: box it
+    * conditionally implement a trait for any type that implements another trait
+        * example: `impl<T: Display> ToString for T`
 * useful traits
     * some of them Rust can automatically implement for you with `#[derive]` attribute
+        * attributes are metadata about pieces of Rust code
         * example: `#[derive(Copy, Clone, Debug, PartialEq)]`
     * `Clone`
         * deep copy: expensive, in both time and memory
@@ -885,7 +919,7 @@
         * struct is allowed to contain a single unsized field, and this makes the struct itself unsized
 
 ## closures
-* closure may contain data
+* unlike functions, closures can capture values from the scope in which they’re defined
     * subject to the rules about borrowing and lifetimes
         * two ways for closures to get data from enclosing scopes
             * moves
@@ -901,65 +935,103 @@
                 ```
             * borrowing
                 * default behavior for closures in Rust is to capture variables by reference
-    * example
-        * For example, the function
-          cmp_by_timestamp_then_name could not use v directly. (Rust also has closures, which
-          do see into enclosing scopes.
-            let mut v = vec![];
-            ...
-            fn cmp_by_timestamp_then_name(a: &FileInfo, b: &FileInfo) -> Ordering {
-            a.timestamp.cmp(&b.timestamp) // first, compare timestamps
-            .reverse() // newest file first
-            .then(a.path.cmp(&b.path)) // compare paths to break ties
-            }
-* implements an `Fn` trait
-    * note that `fn` is not a trait
-        * cannot be used in `where` clause
-    *  is a trait that represents types that can be called as if they were functions
-        ```
-        pub trait Fn<Args> { // simplified
-            type Output;
-            fn call(&self, args: Args) -> Self::Output; // self passed by reference
-        }
-        ```
-    * automatically implemented by all functions
-    * used primarily for working with closures
-        * for example: `HashMap` not implements `Fn`
+    * usually do not have the same type as functions
+        * every capturing closure has its own type
+            * no two closures have exactly the same type
+            * ad hoc type created by the compiler, large enough to hold that data
+        * if don’t capture anything are identical to function pointers
+            * example
+                ```
+                fn function() {
+                    println!("I'm a regular function!");
+                }
+
+                let fn_ptr: fn() = function; // function pointer, implements Fn as well
+
+                let closure: fn() = || { // closure without capturing anything
+                    println!("I'm a closure without capturing anything!");
+                };
+* automatically implement one, two, or all three of `Fn` traits
+    * depending on how the closure’s body handles the values
+    * `move`
+        * has no effect in whether a closure is `Fn` or `FnMut` or not
+        * causes the variables to be moved into the closure at creation time
+            * does not prevent the closure from being called more than once
+            * example
+                ```
+                let s = String::from("test");
+
+                let f = move || {
+                    ();
+                };
+
+                f();
+                f(); // is compiling
+                ```
+        * usually, you don't have to annotate the move keyword to explicitly tell the compiler
+            ```
+            let s = String::from("test");
+
+            let f = || {
+                s;
+                ()
+            };
+
+            s; // compilation error: value used here after move, so move actually took place
+            ```
+        * if the closure uses the value from the environment only via references, the compiler assumes that moving
+        that variable into the closure is not necessary
+            * it might still be necessary for another reason: lifetimes
+                * example: compiler doesn't make the closure a move closure
+                    ```
+                    fn get_printer(s: String) -> Box<Fn()> {
+                        // s now lives in the stackframe of get_printer and the closure outlives that stackframe
+                        Box::new(|| println!("{}", s)) // s is used in read only fashion via reference (println doesn't consume its arguments)
+                    }
+                    ```
     * `FnOnce`
+        * all closures implement at least this trait
+            * all closures can be called
+            * if this trait is the only one they implement and no other, then they can only be called once
         * represents closures that can be invoked only once
             ```
             pub trait Fn<Args> { // simplified
                 type Output;
-                fn call(self, args: Args) -> Self::Output; // self passed by value
+                fn call(self, args: Args) -> Self::Output; // "self" passed by value vs "&self" passed in Fn
             }
             ```
-        * example
-            ```
-            let map = ...
-            let f = || {
-                for (key, value) in map { // consumes map
-                    ...
-                }
-            }
-            f(); // ok
-            f(); // error: use of moved value
-* usually do not have the same type as functions
-    * if don’t capture anything are identical to function pointers
-        * example
-            ```
-            fn function() {
-                println!("I'm a regular function!");
-            }
+        * if the closure code moves any value out of the captured variables the closure becomes `FnOnce`
+            * example: consumes these values (value would no longer be in the environment)
+                ```
+                let s = String::from("test");
 
-            let fn_ptr: fn() = function; // function pointer, implements Fn as well
+                let f = move || {
+                    let ss = s;
+                    println!("{}", ss);
+                };
 
-            let closure: fn() = || { // closure without capturing anything
-                println!("I'm a closure without capturing anything!");
-            };
+                f();
+                f(); // not compile: closure cannot be invoked more than once because it moves the variable `s` out of its environment
+                ```
+    * `FnMut`
+        * don’t move out captured values
+        * might mutate the captured values
+    * `Fn`
+        * don’t move out captured values
+        * don’t mutate captured values
+        * is `FnMut` as well
+        * note that `fn` is not a trait
+            * example: cannot be used in `where` clause
+        * represents types that can be called as if they were functions
             ```
-    * every closure has its own type
-        * no two closures have exactly the same type
-        * ad hoc type created by the compiler, large enough to hold that data
+            pub trait Fn<Args> { // simplified
+                type Output;
+                fn call(&self, args: Args) -> Self::Output; // self passed by reference
+            }
+            ```
+        * automatically implemented by all functions
+        * used primarily for working with closures
+            * for example: `HashMap` not implements `Fn`
 * we don’t need to declare the types of a closure’s arguments
     * Rust will infer them, along with its return type
 
@@ -1028,6 +1100,7 @@
             * means "all references in T must outlive lifetime 'a"
             * observation: `T: 'a` includes all `&'a T`
         * `'static`
+            * usually error values are always string literals that have the `'static` lifetime
             * indicates that the data pointed to by the reference lives for the remaining lifetime of the running program
                 * rather limiting
                     ```
@@ -1089,7 +1162,7 @@
         * at run time, a reference is nothing but an address
     * every type in Rust has a lifetime
     * function signatures with lifetimes have a few constraints:
-        * any reference must have an annotated lifetime.
+        * any reference must have an annotated lifetime
         * any reference being returned must have the same lifetime as an input or be static.
         * elision
             * set of rules in Rust that allow the omission of explicit lifetime annotations in function signatures
@@ -1234,7 +1307,7 @@
                 * will prevent any subsequent moves and essentially consume the value
 * `|` can be used to combine several patterns in a single match arm
 
-## String vs !str vs str
+## String vs &str vs str
 * UTF-8
     * encodes a character as a sequence of one to four bytes
     * restrictions
@@ -1242,29 +1315,22 @@
             * example: can’t spend four bytes encoding a code point that would fit in three
         * must not encode numbers from `0xd800` through `0xdfff` or beyond `0x10ffff`
             * either reserved for noncharacter purposes or outside Unicode’s range entirely
-* sequences of Unicode characters stored as a well-formed UTF-8 encoding
-    * simple char-by-char comparison does not always give the expected answers
-        * example: `th\u{e9}` and `the\u{301}`` are both valid Unicode representations for thé
-            * Rust treats them as two completely distinct strings
-* formatting macros
-    * `format!` builds `Strings`
-    * `println!` writes to the standard output
-    * `writeln!` writes to a designated output stream
-    * always borrow shared references
-        * never take ownership or mutate them
-    * example
-        ```
-        let formatted_string = format!("Hello, {}! You are {} years old.", name, age);
-        println!("{}", formatted_string);
-        let mut buffer = Vec::new();
-        writeln!(buffer, formatted_string); // write a formatted string to the buffer
-        ```
+* Rust has only one string type in the core language: string slice `str`
+    * usually seen in its borrowed form `&str`
+    * sequence of Unicode characters stored as a well-formed UTF-8 encoding
+        * simple char-by-char comparison does not always give the expected answers
+            * example: `th\u{e9}` and `the\u{301}`` are both valid Unicode representations for thé
+                * Rust treats them as two completely distinct strings
+        * don’t support indexing
+            * unintuitive
+            * UTF-8 may take 1 to 4 bytes, so `str[idx]` would need to return byte
 * for Java people:
     * Rust' String === StringBuilder
     * Rust's &str === (immutable) string
 * `String`
     * implemented as a wrapper around a Vec<u8>
         * ensures the vector’s contents are always well-formed UTF-8
+    * is provided by Rust’s standard library rather than coded into the core language
     * lives on the heap and therefore is mutable and can alter its size and contents
         * it is very slow
     * can't be created at compile-time => there must be a runtime function call to do that allocation
@@ -1332,6 +1398,19 @@
     * functions arguments
         * pass &str if function does something with a string without needing to stash it away somewhere
         * pass `String` if function modifies or needs to store it for later
+* formatting macros
+    * `format!` builds `Strings`
+    * `println!` writes to the standard output
+    * `writeln!` writes to a designated output stream
+    * always borrow shared references
+        * never take ownership or mutate them
+    * example
+        ```
+        let formatted_string = format!("Hello, {}! You are {} years old.", name, age);
+        println!("{}", formatted_string);
+        let mut buffer = Vec::new();
+        writeln!(buffer, formatted_string); // write a formatted string to the buffer
+        ```
 
 ## async
 * keywords
@@ -1425,6 +1504,7 @@
             ```
             v.retain(|&val| val <= 10)
             ```
+    * types needs to be known at compile time to know exactly how much memory on the heap will be needed to store each element
     * `VecDeque<T>` - double-ended queue (deque)
 * `HashMap<K, V>`
     * memory
@@ -1533,6 +1613,7 @@
 * `?` operator
     * can only be applied to the types Result<T, E> and Option<T>
     * unwraps valid values or returns erroneous values
+        * return type needs to be compatible with the value the `?` is used on
         * example
             ```
             let output = File::create(filename)?
@@ -1544,8 +1625,28 @@
                 Err(err) => return Err(err)
             };
             ```
+    * error values go through the `From trait` to convert them into the return error type
+        * example
+            ```
+            pub fn fetch_data_from_network(url: &str) -> Result<String, NetworkError> { ... }
+            pub fn read_file_contents(file_path: &str) -> Result<String, FileError> { ... }
+
+            pub enum AppError {
+                FileOperationFailed,
+                NetworkOperationFailed,
+            }
+
+            impl From<FileError> for GatewayError { ... }
+            impl From<NetworkError> for GatewayError { ... }
+
+            pub foo() -> Result<(), GatewayError> {
+                let file_contents = file_parser::read_file_contents("example.txt")?;
+                let network_data = network::fetch_data_from_network("https://example.com")?;
+                ...
+            } // converts specific errors to GatewayError
+            ```
 * dot
-    * The unary * operator is used to access the value pointed to by a reference. As we’ve
+    * The unary `*` operator is used to access the value pointed to by a reference. As we’ve
       seen, Rust automatically follows references when you use the . operator to access a
       field or method, so the * operator is necessary only when we want to read or write the
       entire value that the reference points to.
@@ -1578,14 +1679,30 @@
     }
     ```
 * `cargo build --release` skips the testing code
+    * cargo compiles our test code only if we actively run the tests with `cargo test`
 * assertions
     * `assert!`, `assert_eq!`, `assert_ne!`
     * macros from the Rust standard library
     * panics, which causes the test to fail
+        * when the main thread sees that a test thread has died, the test is marked as failed
 * integration tests
+    * entirely external to your library
+        * use your library in the same way any other code would
     * `.rs` files that live in a `tests` directory alongside `src`
-    * `cargo test` compiles each integration test as a separate, standalone crate, linked with your library
-    and the Rust test harness
+    * requires `src/lib.rs` file
+        * only library crates expose functions that other crates can use
+        * binary crate with only `src/main.rs` file => can’t create integration tests in the tests
+            * binary crates are meant to be run on their own
+    * don’t need to annotate any code in `tests/integration_test.rs` with `#[cfg(test)]`
+        * cargo compiles files in this directory only when we run `cargo test`
+        * each file in the `tests` directory is compiled as its own separate crate
+            * files in subdirectories don’t get compiled as separate crates or have sections in the test output
+                ```
+                └── tests
+                    ├── common
+                    │   └── mod.rs // tells Rust not to treat the common module as an integration test file
+                    └── integration_test.rs
+                ```
 * run tests from a file
     * cargo test --test file_name
 * parallelization
