@@ -30,7 +30,7 @@ async fn test_create_and_get_customer() {
 
     // when
     let customer_id = create_response.headers().get_one("Location").unwrap();
-    let get_response = client.get(format!("/api/customers/{}", customer_id))
+    let get_response = client.get(format!("/api/customers/{customer_id}"))
         .dispatch()
         .await;
 
