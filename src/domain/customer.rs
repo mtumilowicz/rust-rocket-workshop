@@ -1,8 +1,9 @@
 use std::fmt;
 use std::sync::Arc;
-use mockall::mock;
 use thiserror::Error;
 use crate::domain::id::IdService;
+#[cfg(test)]
+use mockall::*;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
 pub struct CustomerId(String);
@@ -100,27 +101,11 @@ pub enum CustomerError {
     CustomerAlreadyExist(CustomerId),
 }
 
+#[cfg_attr(test, automock)]
 pub trait CustomerRepository {
     fn create(&self, customer: Customer) -> Result<Customer, CustomerError>;
     fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer>;
 
-}
-
-mock! {
-        pub CustomerRepository {
-            pub fn create(&self, customer: Customer) -> Result<Customer, CustomerError>;
-            pub fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer>;
-        }
-    }
-
-impl CustomerRepository for MockCustomerRepository {
-    fn create(&self, customer: Customer) -> Result<Customer, CustomerError> {
-        self.create(customer)
-    }
-
-    fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer> {
-        self.get_by_id(customer_id)
-    }
 }
 
 #[cfg(test)]
