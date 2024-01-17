@@ -69,6 +69,11 @@
     * https://docs.rs/mockall/latest/mockall/
     * https://github.com/asomers/mockall
     * https://rocket.rs/v0.5/guide/
+    * https://api.rocket.rs/v0.5/rocket
+    * https://github.com/rwf2/Rocket/issues/1736
+    * https://stackoverflow.com/questions/76965631/how-do-i-spawn-possibly-blocking-async-tasks-in-tokio
+    * https://github.com/rwf2/Rocket/issues/53#issuecomment-277149045
+    * https://docs.rs/figment/0.10.13/figment/
 
 ## general
 * Rust is a statically typed language
@@ -1789,6 +1794,70 @@
 
 ## rocket
 * is a web framework for Rust
+    * provides routing, pre-processing of requests, and post-processing of responses
+* `#[launch]`
+    * generates a main function that launches a returned Rocket<Build>
+    * automatically initializes an async runtime and launches the function’s returned instance
+    * example
+        ```
+        #[launch] // compiled to #[rocket::main]
+        fn rocket() -> _ { // compiled to async fn main() -> Result<(), rocket::Error>
+            rocket::build() // compiled to rocket().launch().await;
+        }
+        ```
+* fully asynchronous core powered by tokio
+    * every request is handled by an asynchronous task which internally calls one or more request handlers
+    * tasks are multiplexed on a configurable number of worker threads
+        * runtime can switch between tasks in a single worker thread iff (if and only if) an await point in reached
+            * context switching is cooperative, not preemptive
+            * if an await point is not reached, no task switching can occur
+                * important that await points occur periodically in a task so that tasks waiting to be scheduled are not starved
+* blocking operation => `rocket::tokio::task::spawn_blocking` (execute the computation in its own thread)
+    * example: long computations
+    * Note that the number of max_blocking_threads also affects how your spawn_blocking tasks execute. The default is 512, so you're unlikely to hit it unless you've got a lot of work to do, but if it does come up, you might want to impose an explicit limit in your application logic, because tasks waiting to run still take up memory, network servers may not appreciate too many incoming connections, and you've only got so many CPU cores anyway — so at that point you may find that overall throughput is improved by intentionally queueing things within your application logic rather than throwing everything you've got at Tokio.
+* configuration: `Rocket.toml`
+    * `debug` and `release` are the default profiles for the respective Rust compilation profile
+    * `default` profile with fallback values for all profiles
+        * defining most configuration
+    * `global` profile with overrides for all profiles
+    * Based on Figment
+        * Figment is a library for declaring and combining configuration sources and extracting typed values from the combined sources
+    * The `workers` parameter sets the number of threads used for parallel task execution
+    * The max_blocking parameter sets an upper limit on the number of threads the underlying async runtime will spawn to execute potentially blocking, synchronous tasks via spawn_blocking or equivalent.
+        * the default value of 512 should not be changed unless physical or virtual resources are scarce
+* `uri!()` macro
+    * uri!("http://localhost:8000")
+    * uri!("https://rocket.rs/", person("Bob", Some(28)), "#woo")
+* #[get("/world")]
+    * rocket::build().mount(base_path, routes![route1, route2, ...]); // route needs to be mounted
+* #[async_trait]
+* #[get("/hello/<name>")]
+  fn hello(name: &str) -> String {
+      format!("Hello, {}!", name)
+  }
+* To indicate that a handler expects body data, annotate it with data = "<param>", where param is an argument in the handler
+* For convenience, Rocket re-exports serde's Serialize and Deserialize traits and derive macros from rocket::serde. However, due to Rust's limited support for derive macro re-exports, using the re-exported derive macros requires annotating structures with #[serde(crate = "rocket::serde")]
+* async fn files(file: PathBuf) -> Option<NamedFile> {
+    * Option is a wrapping responder: an Option<T> can only be returned when T implements Respond
+    *  If the Option is Some, the wrapped responder is used to respond to the client. Otherwise, an error of 404 - Not Found is returned to the client.
+* state is managed on a per-type basis: Rocket will manage at most one value of a given type
+    * Call manage on the Rocket instance corresponding to your application with the initial value of the state
+    * Add a &State<T> type to any request handler, where T is the type of the value passed into manage
+    * handlers can concurrently access managed state
+        * Rocket automatically parallelizes your application
+        * values you store in managed state implement Send + Sync
+    * if you request a &State<T> for a T that is not managed, Rocket will refuse to start your application
+    * Because State is itself a request guard, managed state can be retrieved from another request guard's implementation using either Request::guard() or Rocket::state()
+        * impl<'r> FromRequest<'r> for Item<'r> {
+* testing
+    1. Construct a Client using the Rocket instance.
+    let client = Client::tracked(rocket).unwrap();
+    1. Construct requests using the Client instance.
+    let req = client.get("/");
+    1. Dispatch the request to retrieve the response.
+    let response = req.dispatch();
+    * blocking testing API is easier to use and should be preferred
+        * rocket::local::asynchronous
 
 ## thiserror
 
