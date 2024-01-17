@@ -113,7 +113,7 @@ mock! {
         }
     }
 
-impl CustomerRepository for crate::domain::customer::tests::MockCustomerRepository {
+impl CustomerRepository for MockCustomerRepository {
     fn create(&self, customer: Customer) -> Result<Customer, CustomerError> {
         self.create(customer)
     }
