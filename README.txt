@@ -63,6 +63,12 @@
     * https://stackoverflow.com/questions/50135871/how-can-a-closure-using-the-move-keyword-create-a-fnmut-closure
     * https://users.rust-lang.org/t/fnonce-closure-can-be-called-multiple-times/53790/6
     * https://stackoverflow.com/questions/51698648/why-is-the-move-keyword-not-always-needed-even-when-the-closure-takes-ownership
+    * https://www.reddit.com/r/rust/comments/axf137/are_fat_pointers_and_smart_pointers_same_in_rust/
+    * https://stackoverflow.com/questions/57754901/what-is-a-fat-pointer
+    * https://docs.rs/thiserror/latest/thiserror/
+    * https://docs.rs/mockall/latest/mockall/
+    * https://github.com/asomers/mockall
+    * https://rocket.rs/v0.5/guide/
 
 ## general
 * Rust is a statically typed language
@@ -80,10 +86,10 @@
         * There can only be one owner at a time.
         * When the owner goes out of scope, the value will be dropped.
             * scope is the range within a program for which an item is valid
-* References and Borrowing
+* references and borrowing
     * reference is like a pointer in that it’s an address we can follow to access the data stored at that address
         * that data is owned by some other variable
-        * Unlike a pointer, a reference is guaranteed to point to a valid value of a particular type for the life of that reference
+        * unlike a pointer, a reference is guaranteed to point to a valid value of a particular type for the life of that reference
     * We call the action of creating a reference borrowing
     * Just as variables are immutable by default, so are references. We’re not allowed to modify something we have a reference to.
     * mutable reference
@@ -160,8 +166,11 @@
 * command-line tool
     * useful commands
         * `cargo build` = produces the executable or library specified in your project's configuration
-            * `cargo build --release` = compile it with optimizations
-                * command will create an executable in target/release instead of target/debug
+            * has two main profiles
+                * dev - uses when you run `cargo build`
+                * release - uses when you run `cargo build --release`
+                    * compile it with optimizations
+                    * command will create an executable in target/release instead of target/debug
         * `cargo run` = builds and then runs project
             * entry point to be used is `main.rs`
         * `cargo test` = executes the tests in your project
@@ -525,6 +534,7 @@
         * mechanism to determine which specific version is actually run
         * static
             * not something Go or Java have
+            * use case: generics
             * perform using monomorphization
                 * process of turning generic code into specific code by filling in the concrete types that are used when compiled
                 * example
@@ -546,7 +556,7 @@
                 * upsides: allowing for inlining and hence usually higher performance
                 * downsides: code bloat due to many copies of the same function existing in the binary, one for each type
         * dynamic
-            * provided through a feature called trait objects
+            * use case: trait object
                 * trait objects are normal values that store a value of any type that implements the given trait
                     * type can only be known at runtime
                     * example: `&Foo` or `Box<Foo>`
@@ -915,11 +925,13 @@
         * marker trait
         * Rust can’t store unsized values in variables or pass them as arguments
             * you can only deal with them through pointers like &str or Box<dyn Write> (which themselves are sized)
+            * Rust implicitly adds a bound on Sized to every generic function
+                * example: `fn generic<T: Sized>(t: T)` same as `fn generic<T>(t: T)`
         * pointer to an unsized value is always a fat pointer
         * struct is allowed to contain a single unsized field, and this makes the struct itself unsized
 
 ## closures
-* unlike functions, closures can capture values from the scope in which they’re defined
+* are functions that can capture the enclosing environment (values from the scope)
     * subject to the rules about borrowing and lifetimes
         * two ways for closures to get data from enclosing scopes
             * moves
@@ -1186,10 +1198,6 @@
                     ```
                     fn get_str() -> &str;                                   // ILLEGAL
                     ```
-* fat pointers
-    * structure which contains
-        * the actual pointer to the piece of data
-        * and some additional information (length for slices, pointer to vtable for trait objects)
 * raw pointer
     * kinds
         * `*mut T` - mutable raw pointer
@@ -1201,10 +1209,31 @@
         * Rust makes no effort to track what it points to
     * may be null, may point to memory that now contains a value of a different type etc
     * dereference only within an unsafe block
+* fat pointers
+    * is used to refer to references and raw pointers to dynamically sized types (DSTs) – slices or trait objects
+    * contains
+        * the actual pointer to the piece of data
+        * and some additional information at runtime
+            * example: length for slices, pointer to vtable for trait objects
+* smart pointer
+    * data structures that act like a pointer but also have additional information at compile-time
+        * example
+            1. if the compiler should insert some code when the pointer goes out of scope
+            1. ensure its data will always be valid UTF-8
+    * usually implemented using structs that implement the Deref and Drop traits
+        * example: String, Vec<T>, Box<T>
+    * don't always own the data
+        * example: MutexGuard only lets you get a mutable reference to the type inside the Mutex, where as the Mutex has ownership
+    * vs fat pointers
+        * both built-in pointers like &T and smart pointers like Box<T> are thin if T is statically sized, and fat if T is dynamically sized
 *` Box<T>`
     * simplest way to allocate a value in the heap
     * `Box::new(v)` allocates some heap space, moves the value v into it, and returns a `Box` pointing to the heap space
     * if goes out of scope, the memory is freed immediately
+    * vs `RefCell<T>`
+        * Box - borrowing rules’ invariants are enforced at compile time
+        * RefCell - invariants are enforced at runtime (program will panic and exit)
+            * Mutex<T> is the thread-safe version of RefCell<T>
 * `Cow<'a, T>`
     * means "clone on write"
     * is an enum that can either be
@@ -1245,8 +1274,20 @@
         ```
 * `Rc<T>`
     * means "reference counter"
-    * its contents can't be mutated
+    * non-mutable, non-atomic smart pointer
+        * vs RefCell
+            * RefCell - allows mutable borrows checked at runtime
+            * interior mutability - mutating the value inside an immutable value is the interior mutability pattern
+                * allows to mutate data even when there are immutable references to that data
+                    * normally, this action is disallowed by the borrowing rules
+                * pattern uses unsafe code inside a data structure to bend Rust’s usual rules
+    * call to `Rc::clone` only increments the reference count
+        * doesn’t make a deep copy of all the data
+    * implementation of the Drop trait decreases the reference count automatically when an Rc<T> value goes out of scope
+        * when the count is then 0, and the `Rc` is cleaned up completely
 * `Arc<T>`
+    * atomically reference counted
+    * like Rc<T> but safe to use in concurrent situations
 * CQRS
     * command
         * when you create / insert into a data structure, you move the data in (not reference &)
@@ -1390,8 +1431,16 @@
 * `str`
     * fixed-length, stack or heap allocated string slice
     * is an immutable sequence of UTF-8 bytes of dynamic length somewhere in memory
-    * cannot create a standalone value of type `str`
+    * we can’t create a variable of type str
+        * explanation: all values of a type must use the same amount of memory
+            * example
+                ```
+                 let s1: str = "Hello there!";
+                 let s2: str = "How's it going?";
+                 // s1 needs 12 bytes of storage and s2 needs 15
+                ```
         * always in its borrowed form: `&str`
+            * size of a &str value at compile time: it’s twice the length of a usize (address of str and its length)
 * rule of thumb
     * use String if you need owned string data (like passing strings to other threads, or building them at runtime)
     * use &str if you only need a view of a string
@@ -1737,3 +1786,10 @@
             unreachable!("This code is unreachable");
         }
         ```
+
+## rocket
+* is a web framework for Rust
+
+## thiserror
+
+## mockall
