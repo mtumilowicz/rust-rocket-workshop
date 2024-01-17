@@ -49,11 +49,11 @@ impl From<Customer> for CustomerApiOutput {
     }
 }
 
-impl From<CustomerError> for Custom<&'static str> {
+impl From<CustomerError> for Custom<String> {
     fn from(value: CustomerError) -> Self {
         match value {
-            CustomerError::CustomerAlreadyExist =>
-                Custom(Status::BadRequest, "customer already exists"),
+            CustomerError::CustomerAlreadyExist(customer_id) =>
+                Custom(Status::BadRequest, format!("customer with id = {customer_id} already exists"))
         }
     }
 }
@@ -62,7 +62,7 @@ impl From<CustomerError> for Custom<&'static str> {
 pub async fn create_customer(
     request: Json<NewCustomerApiInput>,
     customer_service: &rocket::State<CustomerService>,
-) -> Result<Created<Json<CustomerApiOutput>>, Custom<&'static str>> {
+) -> Result<Created<Json<CustomerApiOutput>>, Custom<String>> {
     let new_customer: NewCustomerCommand = request.into_inner().into();
     customer_service.create(new_customer).await
         .map(|customer| {

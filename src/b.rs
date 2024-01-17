@@ -51,7 +51,7 @@ fn main() {
             false,
         );
         let result = repository.create(customer1.to_customer(CustomerId::new(String::from("a"))));
-        println!("{:?}", result);
+        println!("{result:?}");
     });
 
     // let thread2 = thread::spawn(move || {

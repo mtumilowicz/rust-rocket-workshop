@@ -17,13 +17,14 @@ impl CustomerInMemoryRepository {
 impl CustomerRepository for CustomerInMemoryRepository {
 
     fn create(&self, customer: Customer) -> Result<Customer, CustomerError> {
-        match self.get_by_id(customer.id()) {
+        let customer_id = customer.id();
+        match self.get_by_id(customer_id) {
             None => {
-                self.customers.write().unwrap().insert(customer.id().clone(), customer.clone());
+                self.customers.write().unwrap().insert(customer_id.clone(), customer.clone());
                 Ok(customer)
             }
             Some(_) =>
-                Err(CustomerError::CustomerAlreadyExist)
+                Err(CustomerError::CustomerAlreadyExist(customer_id.clone()))
 
         }
 

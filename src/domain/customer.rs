@@ -1,8 +1,17 @@
+use std::fmt;
 use std::sync::Arc;
+use mockall::mock;
+use thiserror::Error;
 use crate::domain::id::IdService;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
 pub struct CustomerId(String);
+
+impl fmt::Display for CustomerId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl CustomerId {
     pub fn new(value: String) -> Self {
@@ -85,15 +94,33 @@ impl CustomerService {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CustomerError {
-    CustomerAlreadyExist,
+    #[error("customer with id {0} already exists")]
+    CustomerAlreadyExist(CustomerId),
 }
 
 pub trait CustomerRepository {
     fn create(&self, customer: Customer) -> Result<Customer, CustomerError>;
     fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer>;
 
+}
+
+mock! {
+        pub CustomerRepository {
+            pub fn create(&self, customer: Customer) -> Result<Customer, CustomerError>;
+            pub fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer>;
+        }
+    }
+
+impl CustomerRepository for crate::domain::customer::tests::MockCustomerRepository {
+    fn create(&self, customer: Customer) -> Result<Customer, CustomerError> {
+        self.create(customer)
+    }
+
+    fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer> {
+        self.get_by_id(customer_id)
+    }
 }
 
 #[cfg(test)]
@@ -104,25 +131,27 @@ mod tests {
     use super::*;
 
     #[async_test]
-    async fn test_create_and_get_customer() {
+    async fn test_create_and_get_customer() -> Result<(), Box<dyn std::error::Error>> {
         let id_service = Arc::new(IdService::new(DeterministicRepository::new()));
         let customer_repository = CustomerInMemoryRepository::new();
-        let customer_service = CustomerService::new(id_service.clone(), customer_repository);
+        let customer_service = CustomerService::new(id_service, customer_repository);
 
         let new_customer_command = NewCustomerCommand::new("John Doe".to_string(), false);
 
-        let created_customer = customer_service.create(new_customer_command).await.unwrap();
+        let created_customer = customer_service.create(new_customer_command).await?;
 
-        let retrieved_customer = customer_service.get_by_id(&created_customer.id()).await.unwrap();
+        let retrieved_customer = customer_service.get_by_id(&created_customer.id()).await.ok_or("customer not found")?;
 
         assert_eq!(retrieved_customer, created_customer);
+
+        Ok(())
     }
 
     #[async_test]
     async fn test_get_nonexistent_customer() {
         let id_service = Arc::new(IdService::new(DeterministicRepository::new()));
         let customer_repository = CustomerInMemoryRepository::new();
-        let customer_service = CustomerService::new(id_service.clone(), customer_repository);
+        let customer_service = CustomerService::new(id_service, customer_repository);
 
         let customer_id = CustomerId("nonexistent_id".to_string());
 
@@ -130,4 +159,24 @@ mod tests {
 
         assert!(result.is_none());
     }
+
+    #[async_test]
+    async fn test_create_existing_customer() {
+        let id_service = Arc::new(IdService::new(DeterministicRepository::new()));
+
+        let mut mock_repository = MockCustomerRepository::new();
+        mock_repository
+            .expect_create()
+            .times(1)
+            .returning(|customer| Err(CustomerError::CustomerAlreadyExist(customer.id().clone())));
+
+        let customer_service = CustomerService::new(id_service, mock_repository);
+
+        let new_customer_command = NewCustomerCommand::new("John Doe".to_string(), false);
+
+        let result = customer_service.create(new_customer_command).await;
+
+        assert!(matches!(result, Err(CustomerError::CustomerAlreadyExist(_))));
+    }
+
 }
