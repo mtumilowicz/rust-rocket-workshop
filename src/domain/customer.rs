@@ -4,6 +4,7 @@ use thiserror::Error;
 use crate::domain::id::IdService;
 #[cfg(test)]
 use mockall::*;
+use rocket::async_trait;
 
 #[derive(Eq, Hash, PartialEq, Clone, Debug)]
 pub struct CustomerId(String);
@@ -87,11 +88,11 @@ impl CustomerService {
     pub async fn create(&self, command: NewCustomerCommand) -> Result<Customer, CustomerError> {
         let id = self.id_service.generate().await;
         let customer = command.to_customer(CustomerId(id));
-        self.repository.create(customer)
+        self.repository.create(customer).await
     }
 
     pub async fn get_by_id(&self, id: &CustomerId) -> Option<Customer> {
-        self.repository.get_by_id(id)
+        self.repository.get_by_id(id).await
     }
 }
 
@@ -102,9 +103,10 @@ pub enum CustomerError {
 }
 
 #[cfg_attr(test, automock)]
+#[async_trait]
 pub trait CustomerRepository {
-    fn create(&self, customer: Customer) -> Result<Customer, CustomerError>;
-    fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer>;
+    async fn create(&self, customer: Customer) -> Result<Customer, CustomerError>;
+    async fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer>;
 
 }
 

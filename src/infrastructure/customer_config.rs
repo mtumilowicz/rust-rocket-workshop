@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
+use rocket::async_trait;
 use crate::domain::customer::{Customer, CustomerId, CustomerRepository, CustomerError};
 
 pub struct CustomerInMemoryRepository {
@@ -14,11 +15,12 @@ impl CustomerInMemoryRepository {
     }
 }
 
+#[async_trait]
 impl CustomerRepository for CustomerInMemoryRepository {
 
-    fn create(&self, customer: Customer) -> Result<Customer, CustomerError> {
+     async fn create(&self, customer: Customer) -> Result<Customer, CustomerError> {
         let customer_id = customer.id();
-        match self.get_by_id(customer_id) {
+        match self.get_by_id(customer_id).await {
             None => {
                 self.customers.write().unwrap().insert(customer_id.clone(), customer.clone());
                 Ok(customer)
@@ -30,7 +32,7 @@ impl CustomerRepository for CustomerInMemoryRepository {
 
     }
 
-    fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer> {
+     async fn get_by_id(&self, customer_id: &CustomerId) -> Option<Customer> {
         self.customers.read().unwrap().get(customer_id).cloned()
     }
 }
