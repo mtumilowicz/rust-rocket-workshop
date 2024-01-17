@@ -17,7 +17,7 @@ impl Into<NewCustomerCommand> for NewCustomerApiInput {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct CustomerApiOutput {
     id: String,
