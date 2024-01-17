@@ -18,7 +18,7 @@ mod tests {
 
     #[async_test]
     async fn test_load_config_with_development_profile() {
-        env::set_var("ROCKET_PROFILE", "development");
+        env::set_var("ROCKET_PROFILE", "debug");
 
         let config = load_config().await.unwrap();
 
