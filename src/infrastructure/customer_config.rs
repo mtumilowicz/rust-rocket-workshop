@@ -1,16 +1,17 @@
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use rocket::async_trait;
+use rocket::tokio::task::spawn_blocking;
 use crate::domain::customer::{Customer, CustomerId, CustomerRepository, CustomerError};
 
 pub struct CustomerInMemoryRepository {
-    customers: RwLock<HashMap<CustomerId, Customer>>,
+    customers: Arc<RwLock<HashMap<CustomerId, Customer>>>,
 }
 
 impl CustomerInMemoryRepository {
     pub fn new() -> Self {
         CustomerInMemoryRepository {
-            customers: RwLock::new(HashMap::new()),
+            customers: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -22,7 +23,12 @@ impl CustomerRepository for CustomerInMemoryRepository {
         let customer_id = customer.id();
         match self.get_by_id(customer_id).await {
             None => {
-                self.customers.write().unwrap().insert(customer_id.clone(), customer.clone());
+                let c_id = customer_id.clone();
+                let c = customer.clone();
+                let customers = self.customers.clone();
+                let _ = spawn_blocking(move ||
+                    customers.write().unwrap().insert(c_id, c)
+                ).await;
                 Ok(customer)
             }
             Some(_) =>
