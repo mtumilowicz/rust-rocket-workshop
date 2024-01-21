@@ -1,3 +1,4 @@
+# rust-rocket-workshop
 
 * references
     * https://doc.rust-lang.org/
@@ -75,78 +76,69 @@
     * https://github.com/rwf2/Rocket/issues/53#issuecomment-277149045
     * https://docs.rs/figment/0.10.13/figment/
 
-## general
-* Rust is a statically typed language
-* Rust code uses snake case
-* Rust to make memory safety guarantees without needing a garbage collector
-* Pushing to the stack is faster than allocating on the heap because the allocator never has to search for a place to store new data; that location is always at the top of the stack.
-* Accessing data in the heap is slower than accessing data on the stack because you have to follow a pointer to get there.
+## rust
+* statically typed language
+* makes memory safety guarantees without needing a garbage collector
+* by default allocate on stack
+    * accessing data in the heap is slower than accessing data on the stack
+        * you have to follow a pointer to get there
+    * pushing to the stack is faster than allocating on the heap
+        * allocator never has to search for a place to store new data
+            * that location is always at the top of the stack
+* uses snake case
 
 ## ownership and borrowing
 * ownership
     * a set of rules that govern how a Rust program manages memory
-    * memory is managed through a system of ownership with a set of rules that the compiler checks
-    * rules
-        * Each value in Rust has an owner.
-        * There can only be one owner at a time.
-        * When the owner goes out of scope, the value will be dropped.
-            * scope is the range within a program for which an item is valid
+        * rules
+            * each value in Rust has an owner
+            * there can only be one owner at a time
+            * when the owner goes out of scope, the value will be dropped
+                * scope = range within a program for which an item is valid
+        * called system of ownership
 * references and borrowing
-    * reference is like a pointer in that it’s an address we can follow to access the data stored at that address
-        * that data is owned by some other variable
-        * unlike a pointer, a reference is guaranteed to point to a valid value of a particular type for the life of that reference
-    * We call the action of creating a reference borrowing
-    * Just as variables are immutable by default, so are references. We’re not allowed to modify something we have a reference to.
-    * mutable reference
-    * Mutable references have one big restriction: if you have a mutable reference to a value, you can have no other references to that value.
-    * Rust can prevent data races at compile time. A data race is similar to a race condition and happens when these three behaviors occur:
+    * reference = address where the data is stored
+        * vs pointer
+            * compiler will ensure that the data will not go out of scope before the reference to the data does
+                * references will never be dangling references
+                    * example: return a reference to a value from HashMap protected by Mutex
+                        ```
+                        fn get(&self, key:&String)-> Option[&String] {
+                            self.a.lock()
+                                .expect("opening lock should not fail")
+                                .get(key) // compilation error: returns a value referencing data owned by the current function
+                        }
 
-      Two or more pointers access the same data at the same time.
-      At least one of the pointers is being used to write to the data.
-      There’s no mechanism being used to synchronize access to the data.
-    * compiler guarantees that references will never be dangling references
-        * if you have a reference to some data, the compiler will ensure that the data will not go out of scope before the reference to the data does
+                        fn delete(&self, key: &String) { // no need to `mut self` due to Mutex
+                                let mut map = self.a.lock().unwrap();
+                                map.remove(key);
+                        }
 
-* The Rust compiler guarantees that when you state that a value won’t change, it really won’t change, so you don’t have to keep track of it yourself
-* Although variables are immutable by default, you can make them mutable by adding mut in front of the variable name
-* Rust checks at compile time to ensure that
-                          you’re using the reference safely. If the checks fail, you get a compiler error.
-* Rust’s borrow system can’t protect you from deadlock
-    * best protection is to keep critical sections small
+                        let r = hash_map_mutex_wrapped.get("a");
+                        hash_map_mutex_wrapped.delete("a");
+                        println!("Value: {}", r); // dangling reference
+                        ```
+                * every value has a single owner that determines its lifetime
+                    * example: variable owns its value
+                    * in Java objects never physically contain other objects in Java
+                    * when control leaves the block in which the owner is declared: owner freed—dropped => owned value is dropped too
+            * for pointer it's not always true
+                * example: `NullPointerException`
+        * data is owned by some other variable
+            * borrowing = action of creating a reference
+            * references are immutable by default
+                * cannot modify something we borrowed
+                * you can make them mutable by adding `mut` in front of the variable name
+        * mutable reference
+            * restriction: if you have a mutable reference to a value, you can have no other references to that value
+                * race condition happens when these three behaviors occur
+                    1. two or more pointers access the same data at the same time
+                    1. at least one of the pointers is being used to write to the data
+                    1. there’s no mechanism being used to synchronize access to the data
+                * way to prevent data races at compile time
+    * borrow system can’t protect you from deadlock
+        * best protection is to keep critical sections small
 
-    * Every value has a single owner that determines its
-      lifetime.
-      * When the owner is freed—dropped, in Rust terminology—the owned value is
-        dropped too.
-    * A variable owns its value.
-      * When control leaves the block in which the variable is
-        declared, the variable is dropped, so its value is dropped along with it.
-
-
-    * In
-      Java, if class Rectangle contains a field Vector2D upperLeft;, then upperLeft is a
-      reference to another separately created Vector2D object. Objects never physically
-      contain other objects in Java.
-
-
-    * returns a value referencing data owned by the current function
-        * How to return a reference to a value from Hashmap wrappered in Arc and Mutex in Rust?
-        ```
-        use std::sync::{Arc,Mutex};
-        use std::collections::HashMap;
-
-        struct Hey{
-            a:Arc<Mutex<HashMap<String, String>>>
-        }
-
-
-        impl Hey {
-            fn get(&self,key:&String)->&String{
-                self.a.lock().unwrap().get(key).unwrap() // compilation error: returns a value referencing data owned by the current function
-            }
-        }
-        ```
-        * If that return type were allowed to point inside the Mutex's data, there would be nothing stopping other code from locking the mutex and deleting the entry, meaning that the returned reference would point at something that was deallocated
 ## cargo
 * crate is the smallest amount of code that the Rust compiler considers at a time
     * example: single source code file
@@ -160,8 +152,9 @@
             * doesn't have a main function
             * don’t compile to an executable
             * define functionality intended to be shared with multiple projects
-* package is a bundle of one or more crates that provides a set of functionality
-    * contains a Cargo.toml
+* package is a collection of source files and a Cargo.toml manifest file which describes the package
+    * can have more than one crate
+        * example: lib crate and bin crate
     * example: Cargo
         * package that contains the binary crate for the command-line tool
 * package manager and build tool
@@ -170,21 +163,39 @@
         * cargo = treat configuration as data
 * command-line tool
     * useful commands
+        * `cargo add` = add dependencies to a Cargo.toml
         * `cargo build` = produces the executable or library specified in your project's configuration
             * has two main profiles
                 * dev - uses when you run `cargo build`
                 * release - uses when you run `cargo build --release`
                     * compile it with optimizations
                     * command will create an executable in target/release instead of target/debug
+            * Cargo stores downloaded build dependencies in the Cargo home
+                * default: `$HOME/.cargo/`
+            * Cargo stores the output of a build into the “target” directory
+                * target/debug/	Contains output for the dev profile.
+                    * dev and test profiles are stored in the debug directory
+                * target/release/	Contains output for the release profile (with the --release option).
+                    * release and bench profiles are stored in the release directory
+                * target/foo/	Contains build output for the foo profile (with the --profile=foo option).
         * `cargo run` = builds and then runs project
             * entry point to be used is `main.rs`
         * `cargo test` = executes the tests in your project
         * `cargo check` = check project for errors and warnings without producing executable
+        * `cargo clean` = remove generated artifacts
         * `cargo tree` = tree-like representation of dependencies
             * including transitive dependencies (dependencies of dependencies)
-        * `cargo update` = ignore the Cargo.lock and figure out the latest versions that fit specifications
+            * useful flags
+                * `--invert` = invert the tree and display the packages that depend on the given package
+                * `--duplicates` = show only dependencies which come in multiple versions
+                    * useful in investigations if the package that depends on the duplicate with the older version can be updated to the newer version so that only one instance is built.
+                * `--edges` = dependency kinds to display
+                    * example: all, build, dev, etc
+        * `cargo update` = update dependencies as recorded in the local lock file
         * `cargo install` = install binaries from crates.io
             * `crates.io` = community’s site for open source crates
+            * installs the specified binary crate globally on your system
+                * typically, `$HOME/.cargo/bin`
             * used for installing command-line tools or utilities
             * `cargo-edit` package provides additional Cargo commands for managing dependencies
                 * `cargo add <dependency-name>` = add a new dependency to Cargo.toml
@@ -201,6 +212,17 @@
         * Cargo looks for the most recent version of the image crate that is considered compatible with version
         * reason: allowing Cargo to use any compatible version is a much more practical default
             * otherwise it would lead to situations where projects couldn't use multiple libraries with slightly different versions of shared dependencies
+        * example
+            ```
+            1.2.3  :=  >=1.2.3, <2.0.0
+            1.2    :=  >=1.2.0, <2.0.0
+            1      :=  >=1.0.0, <2.0.0
+            0.2.3  :=  >=0.2.3, <0.3.0
+            0.2    :=  >=0.2.0, <0.3.0
+            0.0.3  :=  >=0.0.3, <0.0.4
+            0.0    :=  >=0.0.0, <0.1.0
+            0      :=  >=0.0.0, <1.0.0
+            ```
     * example
         ```
         [package]
@@ -230,6 +252,24 @@
                     * edition distinctions are gone by the time the code has been compiled
                     * there’s no pressure to update old crates just to continue to participate in the modern Rust ecosystem
                 * example: fine for a 2015 edition crate to depend on a 2018 edition crate
+    * features
+        * provide a mechanism to express conditional compilation and optional dependencies
+        * package defines a set of named features in the [features] table of Cargo.toml, and each feature can either be enabled or disabled
+        * A package defines a set of named features in the [features] table of Cargo.toml, and each feature can either be enabled or disabled
+            * example
+                ```
+                [features]
+                # Defines a feature named `webp` that does not enable any other features.
+                webp = []
+
+                #[cfg(feature = "webp")]
+                pub mod webp;
+                ```
+        * Features of dependencies can be enabled within the dependency declaration.
+            * serde = { version = "1.0.118", features = ["derive"] }
+        * Some packages use features so that if the features are not enabled, it reduces the size of the crate and reduces compile time.
+        * Experimental features
+            * not want to require their users to also use the nightly channel
 * `Cargo.lock`
     * example
         ```
@@ -1858,6 +1898,9 @@
     let response = req.dispatch();
     * blocking testing API is easier to use and should be preferred
         * rocket::local::asynchronous
+* Typed validation for dynamic parameters like id is implemented via the FromParam trait.
+* to override entries use env variable: ROCKET_{PARAM}
+    * example: `ROCKET_PORT=9092`
 
 ## thiserror
 
