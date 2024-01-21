@@ -142,190 +142,6 @@
     * borrow system can’t protect you from deadlock
         * best protection is to keep critical sections small
 
-## cargo
-* package vs crate vs module
-    * crate
-        * `rustc` compiles one crate at a time
-        * form the atomic compilation unit of the Rust compiler
-        * output artifact of the compiler
-        * two forms
-            * binary crate
-                * programs you can compile to an executable
-                * have a function `main` that defines what happens when the executable runs
-                * example: command-line program, server
-            * library crate
-                * doesn't have a main function
-                * don’t compile to an executable
-                * define functionality intended to be shared with multiple projects
-            * `src/main.rs` and `src/lib.rs` are called crate roots
-                * `main.rs` is binary
-                    * handles running the program
-                * `lib.rs` is library
-                    * handles all the logic
-                * contents of either of these two files form a module named `crate` at the root
-                of the crate’s module structure
-                * usual workflow: binary as a thin wrapper around the library
-                    * example
-                        ```
-                        fn main() {
-                            library::main(); // binary crate becomes a user of the library crate
-                        }
-                        ```
-        * imports
-            * example
-                ```
-                use crate::common::wrapper; // crate refers to src/lib.rs
-                use std::mem::swap;
-
-                fn main() {
-                    wrapper(swap(&mut a, &mut b));
-                }
-                ```
-    * package
-        * `cargo build` builds your whole package
-        * packages are aggregates of crates that share a single Cargo.toml file
-            * example: lib crate and bin crate
-        * artifact managed by Cargo
-        * Cargo book uses the term crate as an alias for package
-            * generally the main artifact of a package is a library crate and since
-            it is identified with the package name it is customary to treat package and crate as synonyms
-    * module
-        * unit of code organization
-        * Rust’s namespaces
-        * container for functions, types, and nested modules
-        * defined using two equivalent approaches
-            * modules in their own file
-                * example
-                    ```
-                    mod customer {
-
-                    }
-                    ```
-            * modules in their own directory with a `mod.rs`
-                * example
-                    * file `customer.rs`
-                    * `mod.rs`
-                        ```
-                        pub mod customer;
-                        ```
-            * example: when Rust sees `mod customer;`, it checks for both
-                * `customer.rs` and `customer/mod.rs`
-                    * if neither file exists, or both exist, that’s an error
-        * `use` = bring symbols (such as functions, structs, enums, and modules) into scope
-            * analogy: filesystem’s directory tree
-                * we use a path in the same way we use a path when navigating a filesystem
-                * `use` and a `path` in a scope is similar to creating a symbolic link in the filesystem
-            * example
-                ```
-                use std::mem::swap;
-
-                fn main() {
-                    swap(&mut a, &mut b);
-                }
-                ```
-* is package manager & build tool
-     * vs sbt
-         * sbt = treat configuration as a code
-         * cargo = treat configuration as data
-* is command-line tool
-    * useful commands
-        * `cargo add` = add dependencies to a Cargo.toml
-        * `cargo build` = produces the executable or library specified in your project's configuration
-            * has two main profiles
-                * `dev` - uses when you run `cargo build`
-                * `release` - uses when you run `cargo build --release`
-                    * compile it with optimizations
-                    * command will create an executable in `target/release` instead of `target/debug`
-            * stores downloaded build dependencies in the Cargo home
-                * default: `$HOME/.cargo/`
-        * `cargo run` = builds and then runs project
-            * entry point to be used is `main.rs`
-        * `cargo test` = executes the tests in your project
-        * `cargo check` = check project for errors and warnings without producing executable
-        * `cargo clean` = remove generated artifacts
-        * `cargo tree` = tree-like representation of dependencies
-            * including transitive dependencies (dependencies of dependencies)
-            * useful flags
-                * `--invert` = invert the tree and display the packages that depend on the given package
-                * `--duplicates` = show only dependencies which come in multiple versions
-                    * useful in investigations if the package that depends on the duplicate with the older version can be updated to the newer version so that only one instance is built.
-                * `--edges` = dependency kinds to display
-                    * example: all, build, dev, etc
-        * `cargo update` = update dependencies as recorded in the local lock file
-        * `cargo install` = install binaries from crates.io
-            * `crates.io` = community’s site for open source crates
-            * installs the specified binary crate globally on your system
-                * typically, `$HOME/.cargo/bin`
-            * used for installing command-line tools or utilities
-            * `cargo-edit` package provides additional Cargo commands for managing dependencies
-                * `cargo add <dependency-name>` = add a new dependency to Cargo.toml
-                * `cargo rm <dependency-name>` = remove a dependency
-* `Cargo.toml`
-    * configuration file
-        * resides at the root of project
-    * contains metadata about project
-        * example: dependencies, build settings, etc
-    * TOML (Tom's Obvious Minimal Language)
-        * data serialization language
-        * organized into key-value pairs
-    * loose interpretation of version specifications
-        * Cargo looks for the most recent version of the image crate that is considered compatible with version
-        * reason: allowing Cargo to use any compatible version is a much more practical default
-            * otherwise it would lead to situations where projects couldn't use multiple libraries with slightly different versions of shared dependencies
-        * example: `1.2.3  :=  >=1.2.3, <2.0.0`
-    * example
-        ```
-        [package]
-        name = "my_project"
-        version = "0.1.0"
-        edition = "2021" // rust edition represents different releases of the Rust programming language
-
-        [dependencies]
-        uuid = { version = "1.6.1", features = ["v4"] } // "1.6.1" is shortcut for "^1.6.1"
-
-        [build-dependencies] // used only during the build process (e.g., build scripts)
-
-        [dev-dependencies] // used only for testing and development
-        ```
-        * Rust editions
-            * example
-                * 2015 edition was the first stable release
-                * 2018 edition changed `async` and `await` into keywords, streamlined the module system, and introduced
-                various other language changes
-                    * incompatible with the 2015 edition
-            * used to evolve without breaking existing code
-                * are backward-compatible
-                    * code written in earlier editions should still compile and work in newer editions
-            * programs can freely mix crates written in different editions
-                * crate’s edition only affects how its source code is construed
-                    * edition distinctions are gone by the time the code has been compiled
-                    * there’s no pressure to update old crates just to continue to participate in the modern Rust ecosystem
-                * example: fine for a 2015 edition crate to depend on a 2018 edition crate
-* `Cargo.lock`
-    * example
-        ```
-        [[package]]
-        name = "uuid"
-        version = "1.6.1"
-        source = "registry+https://github.com/rust-lang/crates.io-index"
-        checksum = "5e395fcf16a7a3d8127ec99782007af141946b4795001f876d54fb0d55978560"
-        dependencies = [
-         "getrandom",
-        ]
-        ```
-    * records the exact version of every crate it used
-        * generated during first time build
-    * builds consult this file and continue to use the same versions
-        * Cargo should not upgrade to the latest library versions every time we build
-            * version numbers are deliberately flexible
-    * should commit?
-        * project is an executable => commit
-            * everyone will consistently get the same versions
-        * library => don't make much sense to commit
-            * downstream users will have `Cargo.lock` files that contain version information
-            for their entire dependency graph
-                * library’s `Cargo.lock` file will be ignored
-
 ## structs
 * three kinds
     * named-field
@@ -1790,6 +1606,190 @@
             unreachable!("This code is unreachable");
         }
         ```
+
+## cargo
+* package vs crate vs module
+    * crate
+        * `rustc` compiles one crate at a time
+        * form the atomic compilation unit of the Rust compiler
+        * output artifact of the compiler
+        * two forms
+            * binary crate
+                * programs you can compile to an executable
+                * have a function `main` that defines what happens when the executable runs
+                * example: command-line program, server
+            * library crate
+                * doesn't have a main function
+                * don’t compile to an executable
+                * define functionality intended to be shared with multiple projects
+            * `src/main.rs` and `src/lib.rs` are called crate roots
+                * `main.rs` is binary
+                    * handles running the program
+                * `lib.rs` is library
+                    * handles all the logic
+                * contents of either of these two files form a module named `crate` at the root
+                of the crate’s module structure
+                * usual workflow: binary as a thin wrapper around the library
+                    * example
+                        ```
+                        fn main() {
+                            library::main(); // binary crate becomes a user of the library crate
+                        }
+                        ```
+        * imports
+            * example
+                ```
+                use crate::common::wrapper; // crate refers to src/lib.rs
+                use std::mem::swap;
+
+                fn main() {
+                    wrapper(swap(&mut a, &mut b));
+                }
+                ```
+    * package
+        * `cargo build` builds your whole package
+        * packages are aggregates of crates that share a single Cargo.toml file
+            * example: lib crate and bin crate
+        * artifact managed by Cargo
+        * Cargo book uses the term crate as an alias for package
+            * generally the main artifact of a package is a library crate and since
+            it is identified with the package name it is customary to treat package and crate as synonyms
+    * module
+        * unit of code organization
+        * Rust’s namespaces
+        * container for functions, types, and nested modules
+        * defined using two equivalent approaches
+            * modules in their own file
+                * example
+                    ```
+                    mod customer {
+
+                    }
+                    ```
+            * modules in their own directory with a `mod.rs`
+                * example
+                    * file `customer.rs`
+                    * `mod.rs`
+                        ```
+                        pub mod customer;
+                        ```
+            * example: when Rust sees `mod customer;`, it checks for both
+                * `customer.rs` and `customer/mod.rs`
+                    * if neither file exists, or both exist, that’s an error
+        * `use` = bring symbols (such as functions, structs, enums, and modules) into scope
+            * analogy: filesystem’s directory tree
+                * we use a path in the same way we use a path when navigating a filesystem
+                * `use` and a `path` in a scope is similar to creating a symbolic link in the filesystem
+            * example
+                ```
+                use std::mem::swap;
+
+                fn main() {
+                    swap(&mut a, &mut b);
+                }
+                ```
+* is package manager & build tool
+     * vs sbt
+         * sbt = treat configuration as a code
+         * cargo = treat configuration as data
+* is command-line tool
+    * useful commands
+        * `cargo add` = add dependencies to a Cargo.toml
+        * `cargo build` = produces the executable or library specified in your project's configuration
+            * has two main profiles
+                * `dev` - uses when you run `cargo build`
+                * `release` - uses when you run `cargo build --release`
+                    * compile it with optimizations
+                    * command will create an executable in `target/release` instead of `target/debug`
+            * stores downloaded build dependencies in the Cargo home
+                * default: `$HOME/.cargo/`
+        * `cargo run` = builds and then runs project
+            * entry point to be used is `main.rs`
+        * `cargo test` = executes the tests in your project
+        * `cargo check` = check project for errors and warnings without producing executable
+        * `cargo clean` = remove generated artifacts
+        * `cargo tree` = tree-like representation of dependencies
+            * including transitive dependencies (dependencies of dependencies)
+            * useful flags
+                * `--invert` = invert the tree and display the packages that depend on the given package
+                * `--duplicates` = show only dependencies which come in multiple versions
+                    * useful in investigations if the package that depends on the duplicate with the older version can be updated to the newer version so that only one instance is built.
+                * `--edges` = dependency kinds to display
+                    * example: all, build, dev, etc
+        * `cargo update` = update dependencies as recorded in the local lock file
+        * `cargo install` = install binaries from crates.io
+            * `crates.io` = community’s site for open source crates
+            * installs the specified binary crate globally on your system
+                * typically, `$HOME/.cargo/bin`
+            * used for installing command-line tools or utilities
+            * `cargo-edit` package provides additional Cargo commands for managing dependencies
+                * `cargo add <dependency-name>` = add a new dependency to Cargo.toml
+                * `cargo rm <dependency-name>` = remove a dependency
+* `Cargo.toml`
+    * configuration file
+        * resides at the root of project
+    * contains metadata about project
+        * example: dependencies, build settings, etc
+    * TOML (Tom's Obvious Minimal Language)
+        * data serialization language
+        * organized into key-value pairs
+    * loose interpretation of version specifications
+        * Cargo looks for the most recent version of the image crate that is considered compatible with version
+        * reason: allowing Cargo to use any compatible version is a much more practical default
+            * otherwise it would lead to situations where projects couldn't use multiple libraries with slightly different versions of shared dependencies
+        * example: `1.2.3  :=  >=1.2.3, <2.0.0`
+    * example
+        ```
+        [package]
+        name = "my_project"
+        version = "0.1.0"
+        edition = "2021" // rust edition represents different releases of the Rust programming language
+
+        [dependencies]
+        uuid = { version = "1.6.1", features = ["v4"] } // "1.6.1" is shortcut for "^1.6.1"
+
+        [build-dependencies] // used only during the build process (e.g., build scripts)
+
+        [dev-dependencies] // used only for testing and development
+        ```
+        * Rust editions
+            * example
+                * 2015 edition was the first stable release
+                * 2018 edition changed `async` and `await` into keywords, streamlined the module system, and introduced
+                various other language changes
+                    * incompatible with the 2015 edition
+            * used to evolve without breaking existing code
+                * are backward-compatible
+                    * code written in earlier editions should still compile and work in newer editions
+            * programs can freely mix crates written in different editions
+                * crate’s edition only affects how its source code is construed
+                    * edition distinctions are gone by the time the code has been compiled
+                    * there’s no pressure to update old crates just to continue to participate in the modern Rust ecosystem
+                * example: fine for a 2015 edition crate to depend on a 2018 edition crate
+* `Cargo.lock`
+    * example
+        ```
+        [[package]]
+        name = "uuid"
+        version = "1.6.1"
+        source = "registry+https://github.com/rust-lang/crates.io-index"
+        checksum = "5e395fcf16a7a3d8127ec99782007af141946b4795001f876d54fb0d55978560"
+        dependencies = [
+         "getrandom",
+        ]
+        ```
+    * records the exact version of every crate it used
+        * generated during first time build
+    * builds consult this file and continue to use the same versions
+        * Cargo should not upgrade to the latest library versions every time we build
+            * version numbers are deliberately flexible
+    * should commit?
+        * project is an executable => commit
+            * everyone will consistently get the same versions
+        * library => don't make much sense to commit
+            * downstream users will have `Cargo.lock` files that contain version information
+            for their entire dependency graph
+                * library’s `Cargo.lock` file will be ignored
 
 ## rocket
 * is a web framework for Rust
