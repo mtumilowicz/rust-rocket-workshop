@@ -75,6 +75,9 @@
     * https://stackoverflow.com/questions/76965631/how-do-i-spawn-possibly-blocking-async-tasks-in-tokio
     * https://github.com/rwf2/Rocket/issues/53#issuecomment-277149045
     * https://docs.rs/figment/0.10.13/figment/
+    * https://www.reddit.com/r/rust/comments/lvtzri/confused_about_package_vs_crate_terminology/
+    * https://stackoverflow.com/questions/52024304/what-exactly-is-a-crate-in-the-cargo-ecosystem-and-what-is-the-mapping-to-what
+    * https://mmapped.blog/posts/03-rust-packages-crates-modules.html
 
 ## rust
 * statically typed language
@@ -140,44 +143,101 @@
         * best protection is to keep critical sections small
 
 ## cargo
-* crate is the smallest amount of code that the Rust compiler considers at a time
-    * example: single source code file
-    * can contain modules defined in other files
-    * two forms
-        * binary crate
-            * programs you can compile to an executable
-            * have a function `main` that defines what happens when the executable runs
-            * example: command-line program, server
-        * library crate
-            * doesn't have a main function
-            * don’t compile to an executable
-            * define functionality intended to be shared with multiple projects
-* package is a collection of source files and a Cargo.toml manifest file which describes the package
-    * can have more than one crate
-        * example: lib crate and bin crate
-    * example: Cargo
-        * package that contains the binary crate for the command-line tool
-* package manager and build tool
-    * vs sbt
-        * sbt = treat configuration as a code
-        * cargo = treat configuration as data
-* command-line tool
+* package vs crate vs module
+    * crate
+        * `rustc` compiles one crate at a time
+        * form the atomic compilation unit of the Rust compiler
+        * output artifact of the compiler
+        * two forms
+            * binary crate
+                * programs you can compile to an executable
+                * have a function `main` that defines what happens when the executable runs
+                * example: command-line program, server
+            * library crate
+                * doesn't have a main function
+                * don’t compile to an executable
+                * define functionality intended to be shared with multiple projects
+            * `src/main.rs` and `src/lib.rs` are called crate roots
+                * `main.rs` is binary
+                    * handles running the program
+                * `lib.rs` is library
+                    * handles all the logic
+                * contents of either of these two files form a module named `crate` at the root
+                of the crate’s module structure
+                * usual workflow: binary as a thin wrapper around the library
+                    * example
+                        ```
+                        fn main() {
+                            library::main(); // binary crate becomes a user of the library crate
+                        }
+                        ```
+        * imports
+            * example
+                ```
+                use crate::common::wrapper; // crate refers to src/lib.rs
+                use std::mem::swap;
+
+                fn main() {
+                    wrapper(swap(&mut a, &mut b));
+                }
+                ```
+    * package
+        * `cargo build` builds your whole package
+        * packages are aggregates of crates that share a single Cargo.toml file
+            * example: lib crate and bin crate
+        * artifact managed by Cargo
+        * Cargo book uses the term crate as an alias for package
+            * generally the main artifact of a package is a library crate and since
+            it is identified with the package name it is customary to treat package and crate as synonyms
+    * module
+        * unit of code organization
+        * Rust’s namespaces
+        * container for functions, types, and nested modules
+        * defined using two equivalent approaches
+            * modules in their own file
+                * example
+                    ```
+                    mod customer {
+
+                    }
+                    ```
+            * modules in their own directory with a `mod.rs`
+                * example
+                    * file `customer.rs`
+                    * `mod.rs`
+                        ```
+                        pub mod customer;
+                        ```
+            * example: when Rust sees `mod customer;`, it checks for both
+                * `customer.rs` and `customer/mod.rs`
+                    * if neither file exists, or both exist, that’s an error
+        * `use` = bring symbols (such as functions, structs, enums, and modules) into scope
+            * analogy: filesystem’s directory tree
+                * we use a path in the same way we use a path when navigating a filesystem
+                * `use` and a `path` in a scope is similar to creating a symbolic link in the filesystem
+            * example
+                ```
+                use std::mem::swap;
+
+                fn main() {
+                    swap(&mut a, &mut b);
+                }
+                ```
+* is package manager & build tool
+     * vs sbt
+         * sbt = treat configuration as a code
+         * cargo = treat configuration as data
+* is command-line tool
     * useful commands
         * `cargo add` = add dependencies to a Cargo.toml
         * `cargo build` = produces the executable or library specified in your project's configuration
             * has two main profiles
-                * dev - uses when you run `cargo build`
-                * release - uses when you run `cargo build --release`
+                * `dev` - uses when you run `cargo build`
+                * `release` - uses when you run `cargo build --release`
                     * compile it with optimizations
-                    * command will create an executable in target/release instead of target/debug
-            * Cargo stores downloaded build dependencies in the Cargo home
+                    * command will create an executable in `target/release` instead of `target/debug`
+            * stores downloaded build dependencies in the Cargo home
                 * default: `$HOME/.cargo/`
-            * Cargo stores the output of a build into the “target” directory
-                * target/debug/	Contains output for the dev profile.
-                    * dev and test profiles are stored in the debug directory
-                * target/release/	Contains output for the release profile (with the --release option).
-                    * release and bench profiles are stored in the release directory
-                * target/foo/	Contains build output for the foo profile (with the --profile=foo option).
         * `cargo run` = builds and then runs project
             * entry point to be used is `main.rs`
         * `cargo test` = executes the tests in your project
@@ -212,23 +272,13 @@
         * Cargo looks for the most recent version of the image crate that is considered compatible with version
         * reason: allowing Cargo to use any compatible version is a much more practical default
             * otherwise it would lead to situations where projects couldn't use multiple libraries with slightly different versions of shared dependencies
-        * example
-            ```
-            1.2.3  :=  >=1.2.3, <2.0.0
-            1.2    :=  >=1.2.0, <2.0.0
-            1      :=  >=1.0.0, <2.0.0
-            0.2.3  :=  >=0.2.3, <0.3.0
-            0.2    :=  >=0.2.0, <0.3.0
-            0.0.3  :=  >=0.0.3, <0.0.4
-            0.0    :=  >=0.0.0, <0.1.0
-            0      :=  >=0.0.0, <1.0.0
-            ```
+        * example: `1.2.3  :=  >=1.2.3, <2.0.0`
     * example
         ```
         [package]
         name = "my_project"
         version = "0.1.0"
-        edition = "2021" // Ruse edition
+        edition = "2021" // rust edition represents different releases of the Rust programming language
 
         [dependencies]
         uuid = { version = "1.6.1", features = ["v4"] } // "1.6.1" is shortcut for "^1.6.1"
@@ -238,10 +288,9 @@
         [dev-dependencies] // used only for testing and development
         ```
         * Rust editions
-            * represent different releases of the Rust programming language
             * example
                 * 2015 edition was the first stable release
-                * 2018 edition changed async and await into keywords, streamlined the module system, and introduced
+                * 2018 edition changed `async` and `await` into keywords, streamlined the module system, and introduced
                 various other language changes
                     * incompatible with the 2015 edition
             * used to evolve without breaking existing code
@@ -252,24 +301,6 @@
                     * edition distinctions are gone by the time the code has been compiled
                     * there’s no pressure to update old crates just to continue to participate in the modern Rust ecosystem
                 * example: fine for a 2015 edition crate to depend on a 2018 edition crate
-    * features
-        * provide a mechanism to express conditional compilation and optional dependencies
-        * package defines a set of named features in the [features] table of Cargo.toml, and each feature can either be enabled or disabled
-        * A package defines a set of named features in the [features] table of Cargo.toml, and each feature can either be enabled or disabled
-            * example
-                ```
-                [features]
-                # Defines a feature named `webp` that does not enable any other features.
-                webp = []
-
-                #[cfg(feature = "webp")]
-                pub mod webp;
-                ```
-        * Features of dependencies can be enabled within the dependency declaration.
-            * serde = { version = "1.0.118", features = ["derive"] }
-        * Some packages use features so that if the features are not enabled, it reduces the size of the crate and reduces compile time.
-        * Experimental features
-            * not want to require their users to also use the nightly channel
 * `Cargo.lock`
     * example
         ```
@@ -285,88 +316,16 @@
     * records the exact version of every crate it used
         * generated during first time build
     * builds consult this file and continue to use the same versions
+        * Cargo should not upgrade to the latest library versions every time we build
+            * version numbers are deliberately flexible
     * should commit?
-    * project is an executable => commit
-        * everyone will consistently get the same versions
-    * library => don't make much sense to commit
-        * downstream users will have `Cargo.lock` files that contain version information
-        for their entire dependency graph
-            * library’s Cargo.lock file will be ignored
-    * reason
-        * version numbers in Cargo.toml are deliberately flexible
-            * yet we don’t want Cargo to upgrade us to the latest library versions every time we build
-                * example: in the middle of an intense debugging session
-* modules
-    * Rust’s namespaces
-        * containers for the functions, types, constants, etc
-    * defined using two equivalent approaches
-        * modules in their own file
-            * example
-                ```
-                mod customer {
+        * project is an executable => commit
+            * everyone will consistently get the same versions
+        * library => don't make much sense to commit
+            * downstream users will have `Cargo.lock` files that contain version information
+            for their entire dependency graph
+                * library’s `Cargo.lock` file will be ignored
 
-                }
-                ```
-        * modules in their own directory with a `mod.rs`
-            * example
-                * file `customer.rs`
-                * `mod.rs`
-                    ```
-                    pub mod customer;
-                    ```
-        * example: when Rust sees `mod customer;`, it checks for both
-            * `customer.rs` and `customer/mod.rs`
-                * if neither file exists, or both exist, that’s an error
-    * `::` operator
-        * used to access features of a module
-        * example: `std::mem::swap(&mut s1, &mut s2)`
-    * `lib.rs`
-        * `src/main.rs` and `src/lib.rs` are called crate roots
-            * contents of either of these two files form a module named `crate` at the root of the crate’s module structure
-        * vs `main.rs`
-            * `main.rs` is binary
-                * handles running the program
-            * `lib.rs` is library
-                * handles all the logic
-        * usual workflow is to make the binary something like a thin wrapper around the library
-            * example
-                ```
-                fn main() {
-                    library::main(); // binary crate becomes a user of the library crate
-                }
-                ```
-    * `use`
-        * analogy: filesystem’s directory tree
-            * we use a path in the same way we use a path when navigating a filesystem
-            * `use` and a `path` in a scope is similar to creating a symbolic link in the filesystem
-        * bring symbols (such as functions, structs, enums, and modules) into scope
-        * example
-            ```
-            use std::mem::swap;
-
-            fn main() {
-                swap(&mut a, &mut b);
-            }
-            ```
-        * `use crate`
-            * used to bring items from the current crate's root module into scope
-            * `crate` refers to `src/lib.rs`
-            * example
-                ```
-                my_project/
-                |-- src/
-                |   |-- lib.rs // exposes sub_module
-                |   |-- sub_module.rs // defines my_function
-                |-- main.rs // imports my_function with `use crate::my_function`
-                ```
-    * anything that isn’t marked pub is private
-        * can only be used in the same module in which it is defined, or any child modules
-        * `pub` keyword makes an item public
-        * `pub(crate)` makes item available anywhere inside this crate
-            * isn’t exposed as part of the external interface
-            * can’t be used by other crates
-            * won’t show up in this crate’s documentation
-    * can be nested
 ## structs
 * three kinds
     * named-field
