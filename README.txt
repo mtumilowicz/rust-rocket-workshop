@@ -79,6 +79,11 @@
     * https://stackoverflow.com/questions/52024304/what-exactly-is-a-crate-in-the-cargo-ecosystem-and-what-is-the-mapping-to-what
     * https://mmapped.blog/posts/03-rust-packages-crates-modules.html
     * https://docs.rs/nutype/latest/nutype/
+    * https://medium.com/itir/dyn-traits-in-rust-in-2-hours-1a44130ac514
+    * https://www.reddit.com/r/rust/comments/8su7r3/i_dont_understand_the_purpose_of_dyn/
+    * https://www.reddit.com/r/rust/comments/130cxak/when_should_you_use_a_trait_as_a_type_in_rust/
+    * https://www.reddit.com/r/rust/comments/lhjooa/is_dyn_redundant/
+    * https://www.ncameron.org/blog/dyn-trait-and-impl-trait-in-rust/
 
 ## rust
 * statically typed language
@@ -308,13 +313,49 @@
 
 ## traits
 * Rust’s take on interfaces
-    * approach inspired by Haskell’s typeclasses
-    * dispatch
-        * mechanism to determine which specific version is actually run
-        * static
+* approach inspired by Haskell’s typeclasses
+* are not types in Rust
+    * are bounds on types
+    * two ways to use them in a type position
+        * dispatch = mechanism to determine which specific version is actually run
+        1. `dyn Trait` ~ dynamic dispatch
+            * known as a trait object
+                * trait objects are types, and not traits
+            * type can only be known at runtime
+            *
+            * upsides: less code bloat (trait object is not specialised to each of the types)
+            * downsides
+                * slower virtual function calls
+                * inhibiting any chance of inlining and related optimisations
+        1. `impl Trait` ~ static dispatch
             * not something Go or Java have
             * use case: generics
-            * perform using monomorphization
+            * means "any Struct that has an `impl Trait for Struct { ... }`"
+            * can be used in three locations
+                * as an argument type
+                    * example
+                        * `pub fn notify(item: &(impl Summary + Display))`
+                        * `pub fn notify<T: Summary + Display>(item: &T)`
+                        * where clause
+                            ```
+                            fn some_function<T, U>(t: &T) -> i32
+                            where
+                                T: Summary + Display,
+                            ```
+                * as a return type
+                    * use case: iterators
+                        ```
+                        fn women_vip<'a>(persons: &'a Vec<Person>) -> impl Iterator<Item = &'a Person> + 'a { // instead of Filter<Iter<'_, Person>, fn(&&'a Person) -> bool>
+                            persons.iter().filter(|p| p.is_woman())
+                        }
+                        ```
+                    * problem: concrete type needs to be known at compile time
+                        * reason: in order to allocate the right amount of space on the stack
+                        * trait types are unsized and don't have a fixed size known at compile time
+                        * solution: box it
+                * as any type that implements given trait
+                    * example: `impl<T: Display> ToString for T`
+            * performed using monomorphization
                 * process of turning generic code into specific code by filling in the concrete types that are used when compiled
                 * example
                     ```
@@ -323,27 +364,10 @@
 
                     fn do_something<T: Foo>(x: T) { ... } // compiler will create a special version for both u8 and String, and then replace the call sites
                     // fn some_function(foo: impl Trait) { ... } // equivalent to above, can be handy when one type for param
-
-                    fn main() {
-                        let x = 5u8;
-                        let y = "Hello".to_string();
-
-                        do_something(x);
-                        do_something(y);
-                    }
                     ```
-                * upsides: allowing for inlining and hence usually higher performance
-                * downsides: code bloat due to many copies of the same function existing in the binary, one for each type
-        * dynamic
-            * use case: trait object
-                * trait objects are normal values that store a value of any type that implements the given trait
-                    * type can only be known at runtime
-                    * example: `&Foo` or `Box<Foo>`
-            * upsides: less code bloat (trait object is not specialised to each of the types)
-            * downsides
-                * slower virtual function calls
-                * inhibiting any chance of inlining and related optimisations
-* used to add extensions methods to existing types (even built-in like str and bool)
+            * upsides: allowing for inlining and hence usually higher performance
+            * downsides: code bloat due to many copies of the same function existing in the binary, one for each type
+* used to add extensions methods to existing types (even built-in like `str` and `bool`)
     * example
         ```
         impl<W: Write> WriteHtml for W { ... } // extension trait for Write trait
@@ -354,72 +378,12 @@
             }
         }
         ```
-    * the trait itself must be in scope
-* memory: fat pointer
-    * pointer to the value
-    * pointer to a table (vtable) corresponding to the specific implementation of T
-        * vtable is essentially a struct of function pointers, pointing to the concrete piece of machine code for each method in the implementation
-        * example: `trait_object.method()` will retrieve the correct pointer out of the vtable and then do a dynamic call of it
-    * rust automatically converts ordinary references into trait objects when needed
-        * example: `Box<File>` to a `Box<dyn Write>`
-        * how?
-            * Rust knows the referent’s true type , so it just adds the address of the
-            appropriate vtable, turning the regular pointer into a fat pointer
-* orphan rule
-    * when implementing a trait, either the trait or the type must be new in the current crate
-    * without the rule, two crates could implement the same trait for the same type, and Rust wouldn’t know which implementation to use
-    * example: can't `impl Write for u8`
-        * both are defined in the standard library
-* `Self` type represents the concrete type implementing that trait
-    * example
-        ```
-        pub trait Clone {
-            fn clone(&self) -> Self; // type of `x.clone()` is the same as the type of `x`
-        }
-        ```
-* two ways of using traits to write polymorphic code
-    * trait objects
-    * generics
-* `impl Trait` can be used in three locations
-    * as an argument type
-        * example
-            * `pub fn notify(item: &(impl Summary + Display))`
-            * `pub fn notify<T: Summary + Display>(item: &T)`
-            * where clause
-                ```
-                fn some_function<T, U>(t: &T) -> i32
-                where
-                    T: Summary + Display,
-                ```
-    * as a return type, but concrete type needs to be known at compile time
-        * concrete types of iterators could become very complex
-            ```
-            fn women_vip<'a>(persons: &'a Vec<Person>) -> impl Iterator<Item = &'a Person> + 'a { // instead of Filter<Iter<'_, Person>, fn(&&'a Person) -> bool>
-                persons.iter().filter(|p| p.is_woman())
-            }
-            ```
-        * problem: trait types are unsized and don't have a fixed size known at compile time
-            * reason: compiler has to know the type being returned from the function at compile time in order to allocate the right amount of space on the stack
-            * example
-                ```
-                fn make_shape(shape_type: ShapeType) -> impl Shape { // does not compile as we may return Circle, Triangle etc
-                    match shape_type {
-                        ShapeType::Circle => Circle::new(),
-                        ShapeType::Triangle => Triangle::new(),
-                        ShapeType::Rectangle => Rectangle::new(),
-                    }
-                }
-                ```
-            * solution: box it
-    * conditionally implement a trait for any type that implements another trait
-        * example: `impl<T: Display> ToString for T`
 * useful traits
-    * some of them Rust can automatically implement for you with `#[derive]` attribute
-        * attributes are metadata about pieces of Rust code
+    * can be automatically derived
         * example: `#[derive(Copy, Clone, Debug, PartialEq)]`
     * `Clone`
         * deep copy: expensive, in both time and memory
-        * some types don’t make sense to copy: Mutex
+        * some types don’t make sense to copy: `Mutex`
         * ToOwned
             * But what if you want to
               clone a &str or a &[i32]? What you probably want is a String or a Vec<i32>, but
@@ -708,6 +672,25 @@
                 * example: `fn generic<T: Sized>(t: T)` same as `fn generic<T>(t: T)`
         * pointer to an unsized value is always a fat pointer
         * struct is allowed to contain a single unsized field, and this makes the struct itself unsized
+* memory: fat pointer
+    1. pointer to the value
+    1. pointer to a table (vtable) corresponding to the specific implementation of T
+        * vtable is essentially a struct of function pointers, pointing to the concrete piece of machine code for each method in the implementation
+    * rust automatically converts ordinary references into trait objects when needed
+        * example: `Box<File>` to a `Box<dyn Write>`
+        * by turning the regular pointer into a fat pointer (address of the appropriate vtable)
+* when implementing a trait, either the trait or the type must be new in the current crate
+    * orphan rule
+    * without the rule, two crates could implement the same trait for the same type, and Rust wouldn’t know which implementation to use
+    * example: can't `impl Write for u8`
+        * both are defined in the standard library
+* `Self` type represents the concrete type implementing that trait
+    * example
+        ```
+        pub trait Clone {
+            fn clone(&self) -> Self; // type of `x.clone()` is the same as the type of `x`
+        }
+        ```
 
 ## closures
 * are functions that can capture the enclosing environment (values from the scope)
