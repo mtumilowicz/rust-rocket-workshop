@@ -84,6 +84,7 @@
     * https://www.reddit.com/r/rust/comments/130cxak/when_should_you_use_a_trait_as_a_type_in_rust/
     * https://www.reddit.com/r/rust/comments/lhjooa/is_dyn_redundant/
     * https://www.ncameron.org/blog/dyn-trait-and-impl-trait-in-rust/
+    * https://www.reddit.com/r/rust/comments/l5uih4/what_is_the_difference_between_clone_and_to_owned/
 
 ## rust
 * statically typed language
@@ -379,37 +380,50 @@
         }
         ```
 * useful traits
-    * can be automatically derived
+    * some of them can be automatically derived
         * example: `#[derive(Copy, Clone, Debug, PartialEq)]`
     * `Clone`
         * deep copy: expensive, in both time and memory
         * some types don’t make sense to copy: `Mutex`
-        * ToOwned
-            * But what if you want to
-              clone a &str or a &[i32]? What you probably want is a String or a Vec<i32>, but
-              Clone’s definition doesn’t permit that: by definition, cloning a &T must always return a
-              value of type T, and str and [u8] are unsized; they aren’t even types that a function
-              could return.
-            * Unlike clone, which must return exactly Self, to_owned can return anything you
-              could borrow a &Self from: the Owned type must implement Borrow<Self>.
+        * problem: clone converts `&T` to `T`
+            * example: clone a `&str` - `str` is unsized and is not even type that a function could return
+            * solution: `ToOwned` can convert from `&T` to another target type
+                * generalizes `Clone`
+                    * `ToOwned` is `Clone` trait that doesn't have to return itself
+                * used to convert borrowed data (e.g., a reference) into an owned version
+                * example `impl ToOwned for str { type Owned = String; ... }`
     * `Copy`
         * represents values that can be safely duplicated via `memcpy`: simply copying the bits in memory
-            * derived: `#[derive(Clone, Copy)]`
-                * cannot be re-implemented
+            * example: `u8`
+                * you cannot possibly be more efficient with a move
+                    * under the hood it would probably at least entail a pointer copy
+                        * it is already as expensive as a `u8` copy
+        * cannot be implemented, only derived
+        * affects how the compiler uses moves (automatic copies)
+            * just means not treating the old copy as uninitialized
+            * Copy` types are implicitly **cloned** whenever they're moved
                 * every `Copy` type is also required to be `Clone`
                     * `Copy` is a special case of `Clone` where the implementation is just "copy the bits"
-                    * reverse is not true: `Vec<T>`, `String`
-            * example: u8
-                * you cannot possibly be more efficient with a move, since under the hood it would probably at least entail a pointer copy
-                    * it is already as expensive as a u8 copy, so why bother
-        * affects how the compiler uses moves (automatic copies)
-            * `Copy` types are implicitly **cloned** whenever they're moved
-                * but because of the definition of `Copy` this just means not treating the old copy as uninitialized
-            * regardless of whether type implements `Copy` trait or not, `let y = x` always does the same thing: `memcpy`
-                * example: if you do `f(x)` (and not `f(&x)` or `f(&mut x)` the bytes of x really get copied into f's stack frame, at least in debug builds
-                    * it's up to llvm to optimize out this copy in release builds
-                    * if you use `&mut self` instead of `self`, you're still telling Rust to move, but you'll be moving the pointer instead
-                * may be optimised: it is not necessary for move to `memcpy`
+                    * reverse is not true
+                        * example: `Vec<T>`, `String`
+                            ```
+                            let s1 = String::from("hello");
+                            let s2 = s1; // s1 was moved into s2, s1 cannot be used anymore
+                            ```
+        * `move` is a property of the type, not the operation
+            * `let a = b` is always a move, doesn't matter whether `b` is `Copy` or not
+                * always does the same thing: `memcpy`
+                * how to force a move of a type which implements the `Copy` trait?
+                    * question does not make sense - it is always move
+            * similarly, a function call `f(b)` always moves `b`
+                * bytes of `b` really get copied into f's stack frame, at least in debug builds
+                * if you use `&mut self` instead of `self`, you're still telling Rust to move, but you'll be moving the pointer instead
+                    * analogy: Linux OS
+                        * self = physically moving a file from one disk area to another
+                            * you copy n bytes, where n = size of file
+                        * &self/&mut self = moving an inode pointer
+                            * you copy m bytes where m = address (typically disk+sector)
+                * it's up to llvm to optimize out this copy in release builds
                     * example: https://play.rust-lang.org/ show LLVM IR (intermediate representation)
                         ```
                         fn main() {
@@ -423,35 +437,7 @@
                         call void @llvm.memcpy.p0.p0.i64(ptr align 8 %t, ptr align 8 %s, i64 24, i1 false), !dbg !2203
                         ```
                         LLVM IR in Release completely elided the copies (realizing that `s` was unused)
-                    * example: if the object on the stack is large enough, Rust's compiler may choose to pass the object's pointer instead
-            * in these two examples, the only difference is whether you are allowed to access x after the assignment
-                ```
-                #[derive(Debug, Clone, Copy)]
-                pub struct PointCloneAndCopy {
-                    pub x: f64,
-                }
-
-                #[derive(Debug, Clone)]
-                pub struct PointCloneOnly {
-                    pub x: f64,
-                }
-
-                fn test_copy() {
-                    let p1 = PointCloneAndCopy { x: 0. };
-                    let p2 = p1; // because type has `Copy`, it gets copied automatically.
-                }
-
-                fn test_move() {
-                    let p1 = PointCloneOnly { x: 0. };
-                    // To avoid the implicit move, we could explicitly call let p2 = p1.clone();
-                    let p2 = p1; // because type has no `Copy`, this is a move instead.
-                }
-                ```
-                * note that we need move, otherwise we would have two pointers p1 and p2 that when go out of scope,
-                they will both try to free the same memory
-        * is a property of the type, not the operation
-            * `let a = b` is always a move, doesn't matter whether `b` is `Copy` or not
-            *  similarly, a function call `f(b)` always moves `b`
+                    * if the object on the stack is large enough, Rust's compiler may choose to pass the object's pointer instead
         * bitwise copy must represent a valid and independent duplicate of the original value
             * problem: freeing resource
                 * example: `Drop` trait
@@ -460,15 +446,9 @@
                     * don't even have to alias heap data
                         * file handles: file being closed twice
             * problem: exclusive ownership of mutable references
-                * example: Box
-                    ```
-                    let mut a = vec!["a"];
-                    let mut b = Box::new(&mut a);
-                    let mut c = b.copy(); // it would break borrow checker rules
-                    ```
-                * example: Vec
-                    * Vec looks like this: `{ &mut data, length, capacity }`
-                    * copying it means both reference &mut data, which means we have aliased mutable data
+                * example: `Vec`
+                    * `Vec` looks like this: `{ &mut data, length, capacity }`
+                    * copying it means both reference `&mut data`, which means we have aliased mutable data
             * problem: exclusive ownership of a resource
                 * example: Mutex
                     ```
@@ -477,126 +457,71 @@
                     thread::spawn(move || { m; }); // if it were moved with copy, we would have two mutexes on same resource
                     ```
                     * passing a mutex by value (with copy) makes no sense
-            * analogy: Linux OS
-                * self = physically moving a file from one disk area to another
-                    * you copy n bytes, where n = size of file
-                * &self/&mut self = moving an inode pointer]
-                    * you copy m bytes where m = address (typically disk+sector)
-        * use for "plain old data" that are stored on the stack and doesn't contain any heap allocations
-            * however, it could be prudent to omit the `Copy` implementation, to avoid a breaking API change
-        * how to force a move of a type which implements the Copy trait?
-            * question does not make sense - it is always move
+            * use case: "plain old data" that are stored on the stack and doesn't contain any heap allocations
+                * however, it could be prudent to omit the `Copy` implementation, to avoid a breaking API change
     * `Debug`, `Display`
         * `Debug` should format the output in a programmer-facing, debugging context
             * should be derived
-            * is printing for the programmer, because it usually shows more information
             * means printing with `{:?}`
         * `Display` is for user-facing output
             * must be manually implemented
             * means printing with `{}`
-            * automatically implement the ToString trait
-                * ToString should never be implemented but Display instead
+            * automatically implement the `ToString` trait
+                * `ToString` should never be implemented but `Display` instead
     * `Deref`, `DerefMut`
         * specify how dereferencing operators like `*` and `.` behave
-            * without it the compiler can only dereference & references
-            * example
-                ```
-                struct MyBox<T>(T);
-
-                impl<T> Deref for MyBox<T> {
-                    type Target = T;
-
-                    fn deref(&self) -> &Self::Target {
-                        &self.0
-                    }
-                }
-
-                let x = 5;
-                let y = MyBox(x);
-
-                assert_eq!(5, *y); // behind the scenes: *(y.deref())
-                ```
-        * example: Box
+            * without it the compiler can only dereference `&` reference
+        * example
             ```
-            #[derive(Debug)]
-            struct MyStruct {
-                value: i32,
+            struct MyBox<T>(T);
+
+            impl<T> Deref for MyBox<T> {
+                type Target = T;
+
+                fn deref(&self) -> &Self::Target {
+                    &self.0
+                }
             }
 
-            let s1 = MyStruct { value: 42 };
-            let s2 = MyStruct { value: 42 };
-            let box_deref_star = Box::new(s1);
-            let box_deref_dot = Box::new(s2);
+            let x = 5;
+            let y = MyBox(x);
+            let deref_star: i32 = *y; // automatic deref with "*", behind the scenes: *(y.deref())
 
-            let deref_star: MyStruct = *box_deref_star; // manual deref with *
+            let deref_dot: i32 = y.0; // automatic deref with "."
 
-            let deref_dot: i32 = box_deref_dot.value; // automatic deref with .
-
-            fn coercion(value: &MyStruct) {
-
-            }
-            coercion(&box_deref_dot) // automatic deref with coercion
+            fn coercion<T>(value: &T) { }
+            coercion(&y) // automatic deref with coercion
             ```
     * `Drop`
         * called automatically when an object goes out of scope
         * used to free the resources
         * example: `Box`, `Vec`
-    * `Eq`, `Hash`, `PartialEq`
+    * `Eq`, `PartialEq`, `Hash`
         * `PartialEq` = corresponds to a partial equivalence relation
             * symmetric, transitive
         * `Eq` = corresponds to equivalence relation
-            * has no methods
-                * purpose is to signal that for every value of the annotated type, the value is equal to itself
-            * property cannot be checked by the compiler
-            * PartialEq` + reflexive
-            * floating point types implement `PartialEq` but not `Eq`
+            * `PartialEq` + reflexive (value is equal to itself)
+            * marker trait: cannot be checked by the compiler
+            * example of `PartialEq` but not `Eq`: floating point
                 * NaN != NaN
-        * `PartialEq` vs `Eq`
             * `HashMap` requires `Eq`
                 * if you could use `PartialEq`, you would run the risk of black-holing certain values
             * `assert_eq!` requires `PartialEq`
-                * otherwise we could check equality of floats
+                * otherwise we could not check equality of floats
         * `Hash` uses Siphash 1-3
             * Siphash is a cryptographic algorithm that protects hash-flooding denial-of-service attacks
     * `From` and `Into`
-        * useful when performing error handling and is closely related to the ? operator
+        * use case: performing error handling
+            * related to the `?` operator
             * resolves composition of distinct error types
-            * Rust performs implicit conversion on the error value using the From trait
-                ```
-                struct BadRequest {
-                    message: String,
-                }
-
-                impl From<io::Error> for BadRequest {
-                    fn from(error: io::Error) -> Self {
-                        BadRequest {
-                            message: format!("IoError: {}", error),
-                        }
-                    }
-                }
-
-                impl From<num::ParseIntError> for BadRequest {
-                    fn from(error: num::ParseIntError) -> Self {
-                        BadRequest {
-                            message: format!("ParseIntError: {}", error),
-                        }
-                    }
-                }
-
-                fn read_file(file_name: &str) -> Result<String, io::Error> {
-                    Ok(String::from("a"))
-                }
-
-                fn open_and_parse_file(file_name: &str) -> Result<i32, BadRequest> {
-                    let content = read_file(file_name)?;
-                    let num: i32 = content.parse()?;
-                    Ok(num)
-                }
-                ```
-        * Rust provides Into implementation for types that have provided From implementation.
-            * Into should be used, in cases where From cannot be implemented.
+                * implicit conversion on the error value using the `From` trait
+        * Rust provides `Into` implementation for types that have provided `From` implementation
+            * `Into` should be used, in cases where `From` cannot be implemented
+                * example: gateway inputs that results in the same command
+                    * `NewCustomerApiInput`, `NewCustomerV2ApiInput` -> `NewCustomerCommand`
+                    * cannot be implemented using `From`: conflicting implementation for `NewCustomerCommand`
         * conversions cannot fail
-            * use: TryFrom, TryInto, FromStr (kept historical reasons, but equivalent for newer TryFrom<&str>)
+            * use: `TryFrom`, `TryInto`, `FromStr` (kept historical reasons, but equivalent for newer `TryFrom<&str>`)
     * `Send`, `Sync`
         * `Send` = can be moved to different thread
             * means there is always exactly one owner even as the thread changes
