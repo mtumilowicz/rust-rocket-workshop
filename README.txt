@@ -524,88 +524,33 @@
             * use: `TryFrom`, `TryInto`, `FromStr` (kept historical reasons, but equivalent for newer `TryFrom<&str>`)
     * `Send`, `Sync`
         * `Send` = can be moved to different thread
-            * means there is always exactly one owner even as the thread changes
         * `Sync` = `T` is `Sync` if and only if `&T` is `Send`
             * other words: non-mut reference can be moved to different thread
-            * means a value can be borrowed from multiple threads
-        * Rust’s full thread safety story hinges on these two built-in traits
-            * example: HashMap is `Send` + `Sync`
-                * can be read concurrently if there is not mutable reference
+        * automatically derived traits (if a type is composed entirely of `Send` or `Sync` types)
+        * thread safety story relies on these two built-in traits
+            * example: `HashMap` is `Send` + `Sync`
+                * can be read concurrently if there is no mutable reference
                 * can be modified from any thread as long as there is exclusive mutable reference
                     * only one thread accessing it
-        * automatically derived traits
-            * if a type is composed entirely of Send or Sync types, then it is Send or Sync
-        * some types are `Send`, but not `Sync`
-            * example: mpsc::Receiver
-                * it guarantees that the receiving end of an mpsc channel is used by only one thread at a time
-        * some types are `Sync` but not `Send`
-            * example
-                * MutexGuard
-                    * not `Send`: uses libraries that require you to ensure you don't try to free a lock that you acquired in a different thread
-                        * if you were able to Send a MutexGuard to another thread the destructor would run in the thread you sent it to, violating the requirement
-                    * can still be Sync because all you can send to another thread is an &MutexGuard and dropping a reference does nothing
-                * thread-local allocator which doesn’t have any locks, but requires alloc/dealloc happen on the same thread
-                    * OpenSpan<Attached> from zipkin
-        * few types that are neither `Send` nor `Sync`
+        * example of: `Send`, but not `Sync`
+            * `mpsc::Receiver`
+                * receiving end of an mpsc channel is used by only one thread at a time
+        * example of: `Sync` but not `Send`
+            * `MutexGuard`
+                * not `Send`: requires alloc/dealloc happen on the same thread
+                    * sending it to other thread would violate the requirement
+                * is `Sync`: dropping a reference (`&MutexGuard`) does nothing
+            * similar case: thread-local allocator like `OpenSpan<Attached>` from `zipkin`
+        * example of: neither `Send` nor `Sync`
             * usually uses internal mutability in a way that isn’t thread-safe
             * example: `std::rc::Rc<T>`
-                * reason: uses non-atomic operations to manage its reference count
-                * not `Send`
-                    ```
-                    let rc = Rc::new(42);
-
-                    let handle = thread::spawn(move || {
-                        let rc2 = rc.clone(); // race condition to reference count
-                    });
-
-                    rc.clone();
-                    ```
-                * not `Sync`
-                    ```
-                    let rc = Rc::new(42);
-                    let ref_rc = &rc;
-
-                    let handle = thread::spawn(move || {
-                        ref_rc.clone(); // race condition to reference count
-                    });
-
-                    ref_rc.clone();
-                    ```
-        * `Pin<P>`
-            * borrow checker general rule: can't move an object if it has an active reference to it
-                * problem: allow moving self referential structs
-            * ensures that the pointee of any pointer type P has a stable location in memory
-            * it cannot be moved elsewhere and its memory cannot be deallocated until it gets dropped
-                * by default, all types in Rust are movable
-            * use case
-                * self-referential struct
-                    * if the object of the struct is relocated, the value of the member variable will have a meaningless value
-                    * example: intrusive doubly-linked list
-                * to poll futures, they must be pinned
-                    * future might contain self references
-                    * you create a Future, move it around if you want, then you pin it, then you start polling it
-                        * if a Future implements Unpin then you can pin it, poll it, unpin it, move it, pin it again, poll it, unpin it, move it, and so on
-                        * if a Future does not implement Unpin, then you need to pin it once and keep it pinned forever
-            * `Unpin`
-                * cancels the effect of `Pin<P>`
-    * `Sized`
-        * types with a constant size known at compile time
-        * marker trait
-        * Rust can’t store unsized values in variables or pass them as arguments
-            * you can only deal with them through pointers like &str or Box<dyn Write> (which themselves are sized)
-            * Rust implicitly adds a bound on Sized to every generic function
-                * example: `fn generic<T: Sized>(t: T)` same as `fn generic<T>(t: T)`
-        * pointer to an unsized value is always a fat pointer
-        * struct is allowed to contain a single unsized field, and this makes the struct itself unsized
+                * reason: race condition to reference count
+                    * uses non-atomic operations to manage its reference count
 * memory: fat pointer
     1. pointer to the value
-    1. pointer to a table (vtable) corresponding to the specific implementation of T
+    1. pointer to a table (vtable) corresponding to the specific implementation of `T`
         * vtable is essentially a struct of function pointers, pointing to the concrete piece of machine code for each method in the implementation
-    * rust automatically converts ordinary references into trait objects when needed
-        * example: `Box<File>` to a `Box<dyn Write>`
-        * by turning the regular pointer into a fat pointer (address of the appropriate vtable)
-* when implementing a trait, either the trait or the type must be new in the current crate
-    * orphan rule
+* orphan rule: when implementing a trait, either the trait or the type must be new in the current crate
     * without the rule, two crates could implement the same trait for the same type, and Rust wouldn’t know which implementation to use
     * example: can't `impl Write for u8`
         * both are defined in the standard library
@@ -619,37 +564,25 @@
 
 ## closures
 * are functions that can capture the enclosing environment (values from the scope)
-    * subject to the rules about borrowing and lifetimes
-        * two ways for closures to get data from enclosing scopes
-            * moves
-                ```
-                let name = String::from("John");
+    * two ways for closures to get data from enclosing scopes
+        * moves
+            ```
+            let name = String::from("John");
 
-                // without move it will borrow the variable by reference (default behaviour)
-                let print_name = move || { // used to indicate that the closure should take ownership of the variable
-                    println!("Hello, {}", name);
-                };
+            // without move it will borrow the variable by reference (default behaviour)
+            let print_name = move || { // used to indicate that the closure should take ownership of the variable
+                println!("Hello, {}", name);
+            };
 
-                println!("Hello, {}", name); // compilation error: value borrowed here after move
-                ```
-            * borrowing
-                * default behavior for closures in Rust is to capture variables by reference
+            println!("Hello, {}", name); // compilation error: value borrowed here after move
+            ```
+        * borrowing
+            * default behavior for closures in Rust is to capture variables by reference
     * usually do not have the same type as functions
-        * every capturing closure has its own type
+        * capturing => has its own type
             * no two closures have exactly the same type
             * ad hoc type created by the compiler, large enough to hold that data
-        * if don’t capture anything are identical to function pointers
-            * example
-                ```
-                fn function() {
-                    println!("I'm a regular function!");
-                }
-
-                let fn_ptr: fn() = function; // function pointer, implements Fn as well
-
-                let closure: fn() = || { // closure without capturing anything
-                    println!("I'm a closure without capturing anything!");
-                };
+        * not capturing => identical to function pointers `fn()`
 * automatically implement one, two, or all three of `Fn` traits
     * depending on how the closure’s body handles the values
     * `move`
@@ -660,39 +593,34 @@
                 ```
                 let s = String::from("test");
 
-                let f = move || {
-                    ();
-                };
+                let f = move || { (); };
 
                 f();
                 f(); // is compiling
                 ```
-        * usually, you don't have to annotate the move keyword to explicitly tell the compiler
+        * usually, you don't have to annotate the `move` keyword to explicitly tell the compiler
             ```
             let s = String::from("test");
 
-            let f = || {
-                s;
-                ()
-            };
+            let f = || { s; () };
 
-            s; // compilation error: value used here after move, so move actually took place
+            s; // compilation error: value used here after move - move actually took place
             ```
-        * if the closure uses the value from the environment only via references, the compiler assumes that moving
-        that variable into the closure is not necessary
-            * it might still be necessary for another reason: lifetimes
-                * example: compiler doesn't make the closure a move closure
+            * it might still be necessary because of lifetimes
+                * closure uses the value from the environment via references => compiler assumes that moving is not necessary
+                * example
                     ```
-                    fn get_printer(s: String) -> Box<Fn()> {
-                        // s now lives in the stackframe of get_printer and the closure outlives that stackframe
-                        Box::new(|| println!("{}", s)) // s is used in read only fashion via reference (println doesn't consume its arguments)
+                    fn foo(s: String) -> Box<dyn Fn()> { // s now lives in the stackframe of foo and the closure outlives that stackframe
+                        Box::new(|| { &s; () }) // compilation error: compiler doesn't make the closure a move closure
                     }
                     ```
     * `FnOnce`
         * all closures implement at least this trait
+            * `trait Fn<Args: Tuple>: FnMut<Args>`
+            * `trait FnMut<Args: Tuple>: FnOnce<Args>`
             * all closures can be called
-            * if this trait is the only one they implement and no other, then they can only be called once
-        * represents closures that can be invoked only once
+            * if only one implemented trait => can be called only once
+        * represents closures that can be invoked at least once
             ```
             pub trait Fn<Args> { // simplified
                 type Output;
@@ -705,8 +633,7 @@
                 let s = String::from("test");
 
                 let f = move || {
-                    let ss = s;
-                    println!("{}", ss);
+                    s;
                 };
 
                 f();
@@ -718,21 +645,13 @@
     * `Fn`
         * don’t move out captured values
         * don’t mutate captured values
-        * is `FnMut` as well
-        * note that `fn` is not a trait
-            * example: cannot be used in `where` clause
-        * represents types that can be called as if they were functions
-            ```
-            pub trait Fn<Args> { // simplified
-                type Output;
-                fn call(&self, args: Args) -> Self::Output; // self passed by reference
-            }
-            ```
         * automatically implemented by all functions
+            * note that `fn` is not a trait
+                * example: cannot be used in `where` clause
+        * represents types that can be called as if they were functions
         * used primarily for working with closures
             * for example: `HashMap` not implements `Fn`
-* we don’t need to declare the types of a closure’s arguments
-    * Rust will infer them, along with its return type
+* Rust will infer types of a closure’s arguments and return type
 
 ## references
 * Rust’s basic pointer type
