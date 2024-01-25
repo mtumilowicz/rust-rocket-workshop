@@ -89,6 +89,7 @@
     * https://earthly.dev/blog/rust-lifetimes-ownership-burrowing/
     * https://anooppoommen.medium.com/lifetimes-in-rust-7f2331be998b
     * https://www.reddit.com/r/rust/comments/18e3oq0/why_do_lifetimes_need_to_be_leaky/
+    * https://www.reddit.com/r/rust/comments/v1z6bx/what_is_a_cow/
 
 ## rust
 * statically typed language
@@ -194,36 +195,21 @@
     * `Box::new(v)` allocates some heap space, moves the value v into it, and returns a `Box` pointing to the heap space
     * if goes out of scope, the memory is freed immediately
     * vs `RefCell<T>`
-        * Box - borrowing rules’ invariants are enforced at compile time
-        * RefCell - invariants are enforced at runtime (program will panic and exit)
-            * Mutex<T> is the thread-safe version of RefCell<T>
+        * `Box` - borrowing rules’ invariants are enforced at compile time
+        * `RefCell` - invariants are enforced at runtime (program will panic and exit)
+            * `Mutex<T>` is the thread-safe version of `RefCell<T>`
 * `Cow<'a, T>`
     * means "clone on write"
     * is an enum that can either be
-        * `Cow::Borrowed`: borrowed reference `(&'a T)`
-        * `Cow::Owned`: owned value `T`
-    * implements `Deref`
-    * to get a mutable reference: `to_mut`
-        * invoking it on `Cow::Borrowed` calls the reference’s `to_owned` method to get its own copy of the referent,
-        changes into a `Cow::Owned`, and borrows a mutable reference to the newly owned value
-            * "clone on write" behaviour
-        * similarly, method `into_owned` promotes the reference to an owned
-        value and then returns it, moving ownership to the caller
-    * problem: return value should be an owned `String` or sometimes it should be a `&'static str`
-        ```
-        fn get_name() -> String {
-            std::env::var("USER")
-                .unwrap_or("whoever you are") // expected `String`, found `&str`
-        }
-        ```
-        solution
-        ```
-        fn get_name() -> Cow<'static, str> {
-            std::env::var("USER")
-                .map(|v| v.into())
-                .unwrap_or("whoever you are".into()) // std has special support for Cow<'a, str>
-        }
-        ```
+        1. `Cow::Borrowed`
+            * allows you access borrowed reference as long as it lives
+            * makes clone if you attempt to mutate data
+                * invoking `to_mut` calls the reference’s `to_owned` method to get its own copy of the referent
+                * borrows a mutable reference to the newly owned value
+                    * changes into a `Cow::Owned`
+        1. `Cow::Owned`
+            * invoking `into_owned` promotes the reference to an owned value and then returns it
+                * moving ownership to the caller
     * common use case: return either a statically allocated string constant or a computed string
         ```
         fn describe(error: &MyError) -> Cow<'static, str> {
@@ -238,19 +224,13 @@
 * `Rc<T>`
     * means "reference counter"
     * non-mutable, non-atomic smart pointer
-        * vs RefCell
-            * RefCell - allows mutable borrows checked at runtime
-            * interior mutability - mutating the value inside an immutable value is the interior mutability pattern
-                * allows to mutate data even when there are immutable references to that data
-                    * normally, this action is disallowed by the borrowing rules
-                * pattern uses unsafe code inside a data structure to bend Rust’s usual rules
     * call to `Rc::clone` only increments the reference count
-        * doesn’t make a deep copy of all the data
-    * implementation of the Drop trait decreases the reference count automatically when an Rc<T> value goes out of scope
+        * doesn't make a deep copy of all the data
+    * `Rc<T>` value goes out of scope => `Drop` trait decreases the reference count automatically
         * when the count is then 0, and the `Rc` is cleaned up completely
 * `Arc<T>`
     * atomically reference counted
-    * like Rc<T> but safe to use in concurrent situations
+    * like `Rc<T>` but safe to use in concurrent situations
 * CQRS
     * command
         * when you create / insert into a data structure, you move the data in (not reference &)
@@ -263,9 +243,6 @@
         fn get(&self, key: &K) -> Option<&V> // query
         ```
 * permits references to references
-* pass by value vs pass by reference
-    * pass by value = pass a value to a function in a way that moves ownership of the value to the function
-    * pass by reference = pass to a function a reference to the value
 
 ## lifetime
 * is a way to ensure that a reference is not used after the data it points to has been deallocated
@@ -290,14 +267,6 @@
     * variable's lifetime begins when it is created and ends when it is destroyed
 * entirely compile-time
     * at run time, a reference is nothing but an address
-* facilitates reasoning
-    * example: function with a signature `go(p: &str))` cannot stash its argument anywhere that will outlive the call
-* used in two different ways
-    * reference parameter: `&'a T`
-        * means "reference points at a value of type T that is valid for at least the lifetime 'a"
-    * lifetime bound: `T: 'a`
-        * means "all references in T must outlive lifetime 'a"
-        * observation: `T: 'a` includes all `&'a T`
 * function signatures with lifetimes rules
     1. any reference must have an annotated lifetime
     1. any reference being returned must have the same lifetime as an input or be static
@@ -323,8 +292,10 @@
                 ```
                 fn get_str() -> &str;                                   // ILLEGAL
                 ```
+    * facilitates reasoning
+        * example: function with a signature `go(value: &str))` cannot stash its argument anywhere that will outlive the call
+            * reason: `value` is a reference that is only valid in the method body
 * `'static`
-    * usually error values are always string literals that have the `'static` lifetime
     * indicates that the data pointed to by the reference lives for the remaining lifetime of the running program
         * rather limiting
             ```
@@ -332,43 +303,20 @@
                 r: &'static i32 // r can only refer to i32 values that will last for the lifetime of the program
             }
             ```
-        * example of `T` that can be short lived and long lived
-            ```
-            struct MyStruct<'a> {
-                data: &'a str,
-            }
-            fn main() {
-                {
-                    let data = String::from("Short lived data"); // not static
-                    let slice = &short_lived_data; // not static
-                    let struct = MyStruct { data: short_lived_slice }; // not static as not all references are static
-                    thread::spawn(move || { struct; }); // cannot be moved, otherwise outlive data
+        * any owned data always passes a 'static lifetime bound, but a reference to that owned data generally does not
+            * reason: owned data is self-contained and needn’t be dropped before any particular variable goes out of scope
+                * `'static` should really be renamed `'unbounded`
+            * example
+                ```
+                fn test_bound<T: 'static>(t: T) {}
+                fn test_ref<T>(t: &'static T) {}
+                fn main() {
+                    let s1 = String::from("s1"); // not static
+                    test_bound(s1); // passes the 'static bound check
+                    test_ref(&s1); // borrowed value does not live long enough, we can spawn thread in test_ref
                 }
-                {
-                    let data = "Long lived data"; // &'static str
-                    let struct = MyStruct { data: long_lived_data }; // MyStruct<'static> as all references are
-                    thread::spawn(move || { struct; }); // can be moved as it lives long enough
-                }
-            }
-            ```
-    * any owned data always passes a 'static lifetime bound, but a reference to that owned data generally does not
-        * reason: owned data is self-contained and needn’t be dropped before any particular variable goes out of scope
-            * `'static` should really be renamed `'unbounded`
-        * example
-            ```
-            fn test_bound<T: 'static>(t: T) {}
-            fn test_ref<T>(t: &'static T) {}
-            fn main() {
-                let s1 = String::from("s2"); // not static
-                {
-                    let s2 = String::from("s2"); // not static
-                    test_bound(s2); // passes the 'static bound check
-                    test_ref(&s2); // borrowed value does not live long enough
-                }
-                test_bound(s1); // passes the 'static bound check
-                test_ref(&s1); // borrowed value does not live long enough
-            }
-            ```
+                ```
+    * use case: usually error values are always string literals that have the `'static` lifetime
 
 ## borrow checker
 * compiler component that enforces ownership and borrowing rules
@@ -572,6 +520,16 @@
             * not something Go or Java have
             * use case: generics
             * means "any Struct that has an `impl Trait for Struct { ... }`"
+            * performed using monomorphization
+                * process of turning generic code into specific code by filling in the concrete types that are used when compiled
+                * example
+                    ```
+                    impl Foo for u8 { ... }
+                    impl Foo for String { ... }
+
+                    fn do_something<T: Foo>(x: T) { ... } // compiler will create a special version for both u8 and String, and then replace the call sites
+                    // fn some_function(foo: impl Trait) { ... } // equivalent to above, can be handy when one type for param
+                    ```
             * can be used in three locations
                 * as an argument type
                     * example
@@ -596,16 +554,6 @@
                         * solution: box it
                 * as any type that implements given trait
                     * example: `impl<T: Display> ToString for T`
-            * performed using monomorphization
-                * process of turning generic code into specific code by filling in the concrete types that are used when compiled
-                * example
-                    ```
-                    impl Foo for u8 { ... }
-                    impl Foo for String { ... }
-
-                    fn do_something<T: Foo>(x: T) { ... } // compiler will create a special version for both u8 and String, and then replace the call sites
-                    // fn some_function(foo: impl Trait) { ... } // equivalent to above, can be handy when one type for param
-                    ```
             * upsides: allowing for inlining and hence usually higher performance
             * downsides: code bloat due to many copies of the same function existing in the binary, one for each type
 * used to add extensions methods to existing types (even built-in like `str` and `bool`)
@@ -655,6 +603,8 @@
                 * always does the same thing: `memcpy`
                 * how to force a move of a type which implements the `Copy` trait?
                     * question does not make sense - it is always move
+                * rust is pass by value
+                    * reference is passed by value but is `copy`
             * similarly, a function call `f(b)` always moves `b`
                 * bytes of `b` really get copied into f's stack frame, at least in debug builds
                 * if you use `&mut self` instead of `self`, you're still telling Rust to move, but you'll be moving the pointer instead
