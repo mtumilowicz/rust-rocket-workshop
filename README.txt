@@ -85,6 +85,10 @@
     * https://www.reddit.com/r/rust/comments/lhjooa/is_dyn_redundant/
     * https://www.ncameron.org/blog/dyn-trait-and-impl-trait-in-rust/
     * https://www.reddit.com/r/rust/comments/l5uih4/what_is_the_difference_between_clone_and_to_owned/
+    * https://stackoverflow.com/questions/66853369/erronous-mutable-borrow-e0502-when-trying-to-remove-and-insert-into-a-hashmap/
+    * https://earthly.dev/blog/rust-lifetimes-ownership-burrowing/
+    * https://anooppoommen.medium.com/lifetimes-in-rust-7f2331be998b
+    * https://www.reddit.com/r/rust/comments/18e3oq0/why_do_lifetimes_need_to_be_leaky/
 
 ## rust
 * statically typed language
@@ -97,57 +101,293 @@
             * that location is always at the top of the stack
 * uses snake case
 
-## ownership and borrowing
-* ownership
-    * a set of rules that govern how a Rust program manages memory
+## pointer
+* raw pointer
+    * kinds (either can be cast to another without any restrictions)
+        * distinction there serves mostly as a lint
+        * `*mut T` - mutable raw pointer
+        * `*const T` - immutable raw pointer
+    * just like pointers in C++
+    * unsafe
+        * Rust makes no effort to track what it points to
+    * may be null, may point to memory that now contains a value of a different type etc
+    * dereference only within an unsafe block
+* fat pointers
+    * is used to refer dynamically sized types (DSTs)
+        * example: slices or trait objects
+    * contains
+        * the actual pointer to the piece of data
+        * and some additional information at runtime
+            * example: length for slices, pointer to vtable for trait objects
+* smart pointer
+    * data structures that act like a pointer but also have additional information at compile-time
+        * example
+            1. if the compiler should insert some code when the pointer goes out of scope
+            1. ensure its data will always be valid UTF-8
+    * usually implemented using structs that implement the `Deref` and `Drop` traits
+        * example: String, Vec<T>, Box<T>
+    * don't always own the data
+        * example: `MutexGuard` only lets you get a mutable reference to the type inside the `Mutex` while `Mutex` has ownership
+    * vs fat pointers
+        * built-in pointers like `&T` and smart pointers like `Box<T>` are thin if `T` is statically sized, and fat if `T` is dynamically sized
+
+## references
+* Rust’s basic pointer type
+    * may be on the stack or in the heap
+    * example: reference to an i32 is a single machine word holding the address of the i32
+* are never null
+    * for pointer it's not always true
+        * example: `NullPointerException`
+* does not affect ownership
+    * data is owned by some other variable
+* two types
+    * `&T`
+        * immutable, shared reference
+            * read but not modify its referent
+        * `x` has the type `T` => `&x` has the type `&T`
+        * in Rust terminology, we say that it borrows a reference to x
+        * are `Copy`
+            * we can have many shared references
+        * no mutable references along shared references
+            * modifying the value they point to is forbidden
+    * `&mut T`
+        * mutable, exclusive reference
+            * both read and modify
+        * `x` has the type `T` => `&mut x` has the type `&mut T`
+        * forbids any other references of any sort to that value active at the same time
+            * in particular: as long as there are shared references to a value, not even its owner can modify it
+        * are not `Copy` (makes no sense)
+        * iterating provides a mut reference to each element
+    * enforces "multiple readers or single writer" rule at compile time
+        * way to prevent data races
+            * race condition happens when these three behaviors occur
+                1. two or more pointers access the same data at the same time
+                1. at least one of the pointers is being used to write to the data
+                1. there’s no mechanism being used to synchronize access to the data
+        * mistakes like dangling pointers, double frees, and pointer invalidation are ruled out
+            * example
+                ```
+                let mut map: HashMap<String, String> = HashMap::new();
+
+                map.insert("example".to_string(), "a".to_string());
+                let example_ref = map.get("example").unwrap(); // immutable borrow occurs here
+                map.remove("example"); // compilation error: cannot borrow `map` as mutable because it is also borrowed as immutable
+                println!("{a}");
+                ```
+                explanation: `example_ref` is a reference to the map contents, meaning the existence of v requires borrowing the map until v stops being used
+        * can’t protect you from deadlock
+            * best protection is to keep critical sections small
+* syntax
+    * `*` operator
+        * used to access the value pointed to by a reference
+        * often omitted, because "dot" operator automatically references or dereferences its left argument
+        * necessary only when we want to read or write the entire value that the reference points to
+    * `.`
+        * implicitly dereferences its left operand
+        * can also implicitly borrow a reference to its left operand
+            * example: `HashMap`
+                ```
+                hash_map.insert("one", 1) // desugared into (&mut hashmap_wrapper).insert("one", 1);
+                ```
+*` Box<T>`
+    * simplest way to allocate a value in the heap
+    * `Box::new(v)` allocates some heap space, moves the value v into it, and returns a `Box` pointing to the heap space
+    * if goes out of scope, the memory is freed immediately
+    * vs `RefCell<T>`
+        * Box - borrowing rules’ invariants are enforced at compile time
+        * RefCell - invariants are enforced at runtime (program will panic and exit)
+            * Mutex<T> is the thread-safe version of RefCell<T>
+* `Cow<'a, T>`
+    * means "clone on write"
+    * is an enum that can either be
+        * `Cow::Borrowed`: borrowed reference `(&'a T)`
+        * `Cow::Owned`: owned value `T`
+    * implements `Deref`
+    * to get a mutable reference: `to_mut`
+        * invoking it on `Cow::Borrowed` calls the reference’s `to_owned` method to get its own copy of the referent,
+        changes into a `Cow::Owned`, and borrows a mutable reference to the newly owned value
+            * "clone on write" behaviour
+        * similarly, method `into_owned` promotes the reference to an owned
+        value and then returns it, moving ownership to the caller
+    * problem: return value should be an owned `String` or sometimes it should be a `&'static str`
+        ```
+        fn get_name() -> String {
+            std::env::var("USER")
+                .unwrap_or("whoever you are") // expected `String`, found `&str`
+        }
+        ```
+        solution
+        ```
+        fn get_name() -> Cow<'static, str> {
+            std::env::var("USER")
+                .map(|v| v.into())
+                .unwrap_or("whoever you are".into()) // std has special support for Cow<'a, str>
+        }
+        ```
+    * common use case: return either a statically allocated string constant or a computed string
+        ```
+        fn describe(error: &MyError) -> Cow<'static, str> {
+            match error {
+                MyError::OutOfMemory => "out of memory".into(),
+                MyError::FileNotFound(ref path) => {
+                    format!("file not found: {}", path.display()).into()
+                }
+            }
+        }
+        ```
+* `Rc<T>`
+    * means "reference counter"
+    * non-mutable, non-atomic smart pointer
+        * vs RefCell
+            * RefCell - allows mutable borrows checked at runtime
+            * interior mutability - mutating the value inside an immutable value is the interior mutability pattern
+                * allows to mutate data even when there are immutable references to that data
+                    * normally, this action is disallowed by the borrowing rules
+                * pattern uses unsafe code inside a data structure to bend Rust’s usual rules
+    * call to `Rc::clone` only increments the reference count
+        * doesn’t make a deep copy of all the data
+    * implementation of the Drop trait decreases the reference count automatically when an Rc<T> value goes out of scope
+        * when the count is then 0, and the `Rc` is cleaned up completely
+* `Arc<T>`
+    * atomically reference counted
+    * like Rc<T> but safe to use in concurrent situations
+* CQRS
+    * command
+        * when you create / insert into a data structure, you move the data in (not reference &)
+        * when you run a command to change data, move the memory around (no reference &)
+    * query
+        * use references
+    * example: `HashMap`
+        ```
+        fn insert(&mut self, key: K, value: V) // command
+        fn get(&self, key: &K) -> Option<&V> // query
+        ```
+* permits references to references
+* pass by value vs pass by reference
+    * pass by value = pass a value to a function in a way that moves ownership of the value to the function
+    * pass by reference = pass to a function a reference to the value
+
+## lifetime
+* is a way to ensure that a reference is not used after the data it points to has been deallocated
+    * in short: uses to ensure all borrows are valid
+* is a proof that no reference can possibly outlive the value it points to
+    * example: value cannot be dropped when its referents are still alive
+            ```
+            fn create_struct<'a>() -> &'a str {
+                let tmp = String::from("Hello, Rust!"); // data owned by the current function
+
+                &tmp // compilation error: cannot return reference to temporary value
+            } // tmp is dropped here
+            ```
+    * example: reference stored in some data structure must enclose that of the data structure
+        ```
+        struct Path<'a> { // specifies that the reference must live at least as long as the instance of the struct
+            point_x: &'a i32, // struct cannot live longer than references it holds
+            point_y: &'a i32,
+        }
+        ```
+* every type in Rust has a lifetime
+    * variable's lifetime begins when it is created and ends when it is destroyed
+* entirely compile-time
+    * at run time, a reference is nothing but an address
+* facilitates reasoning
+    * example: function with a signature `go(p: &str))` cannot stash its argument anywhere that will outlive the call
+* used in two different ways
+    * reference parameter: `&'a T`
+        * means "reference points at a value of type T that is valid for at least the lifetime 'a"
+    * lifetime bound: `T: 'a`
+        * means "all references in T must outlive lifetime 'a"
+        * observation: `T: 'a` includes all `&'a T`
+* function signatures with lifetimes rules
+    1. any reference must have an annotated lifetime
+    1. any reference being returned must have the same lifetime as an input or be static
+    * elision
+        * set of rules in Rust that allow the omission of explicit lifetime annotations in function signatures
         * rules
-            * each value in Rust has an owner
-            * there can only be one owner at a time
-            * when the owner goes out of scope, the value will be dropped
-                * scope = range within a program for which an item is valid
-        * called system of ownership
-* references and borrowing
-    * reference = address where the data is stored
-        * vs pointer
-            * compiler will ensure that the data will not go out of scope before the reference to the data does
-                * references will never be dangling references
-                    * example: return a reference to a value from HashMap protected by Mutex
-                        ```
-                        fn get(&self, key:&String)-> Option[&String] {
-                            self.a.lock()
-                                .expect("opening lock should not fail")
-                                .get(key) // compilation error: returns a value referencing data owned by the current function
-                        }
+            1. each elided lifetime in input position becomes a distinct lifetime parameter
+                ```
+                fn print_strings(s1: &str, s2: &str)                        // elided
+                fn print_strings<'a, 'b>(s1: &'a str, s2: &'b str)          // expanded
+                ```
+            1. if there is exactly one input lifetime position (elided or not), that lifetime is assigned to all elided output lifetimes
+                ```
+                fn as_pair(input1: &str) -> (&str, &str)                    // elided
+                fn as_pair<'a>(input1: &'a str) -> (&'a str, &'a str)       // expanded
+                ```
+            1. if there are multiple input lifetime positions, but one of them is &self or &mut self, the lifetime of self is assigned to all elided output lifetimes
+                ```
+                pub fn get<Q>(&self, k: &Q) -> Option<&V>                   // elided
+                pub fn get<'a, 'q, Q>(&'a self, k: &'q Q) -> Option<&'a V>  // expanded
+                ```
+            1. otherwise, it is an error to elide an output lifetime
+                ```
+                fn get_str() -> &str;                                   // ILLEGAL
+                ```
+* `'static`
+    * usually error values are always string literals that have the `'static` lifetime
+    * indicates that the data pointed to by the reference lives for the remaining lifetime of the running program
+        * rather limiting
+            ```
+            struct S {
+                r: &'static i32 // r can only refer to i32 values that will last for the lifetime of the program
+            }
+            ```
+        * example of `T` that can be short lived and long lived
+            ```
+            struct MyStruct<'a> {
+                data: &'a str,
+            }
+            fn main() {
+                {
+                    let data = String::from("Short lived data"); // not static
+                    let slice = &short_lived_data; // not static
+                    let struct = MyStruct { data: short_lived_slice }; // not static as not all references are static
+                    thread::spawn(move || { struct; }); // cannot be moved, otherwise outlive data
+                }
+                {
+                    let data = "Long lived data"; // &'static str
+                    let struct = MyStruct { data: long_lived_data }; // MyStruct<'static> as all references are
+                    thread::spawn(move || { struct; }); // can be moved as it lives long enough
+                }
+            }
+            ```
+    * any owned data always passes a 'static lifetime bound, but a reference to that owned data generally does not
+        * reason: owned data is self-contained and needn’t be dropped before any particular variable goes out of scope
+            * `'static` should really be renamed `'unbounded`
+        * example
+            ```
+            fn test_bound<T: 'static>(t: T) {}
+            fn test_ref<T>(t: &'static T) {}
+            fn main() {
+                let s1 = String::from("s2"); // not static
+                {
+                    let s2 = String::from("s2"); // not static
+                    test_bound(s2); // passes the 'static bound check
+                    test_ref(&s2); // borrowed value does not live long enough
+                }
+                test_bound(s1); // passes the 'static bound check
+                test_ref(&s1); // borrowed value does not live long enough
+            }
+            ```
 
-                        fn delete(&self, key: &String) { // no need to `mut self` due to Mutex
-                                let mut map = self.a.lock().unwrap();
-                                map.remove(key);
-                        }
+## borrow checker
+* compiler component that enforces ownership and borrowing rules
+* not being perfect - does not accept all valid programs, but it does reject all invalid programs
+* ownership = set of rules that govern how a Rust program manages memory
+    * rules
+        1. each value in Rust has an owner
+        1. there can only be one owner at a time
+        1. when the owner goes out of scope, the value will be dropped
+            * scope = range within a program for which an item is valid
+            * owner is responsible for value deallocation
+                * Rust eliminates explicit memory deallocation
+* borrowing = action of creating a reference
+    * rules
+        1. each resource can only have one mutable reference or any number of immutable references at a time
+        1. references must always be valid
+            * resource being referenced must remain in scope for the entire lifetime of the reference
+        1. mutable reference cannot exist at the same time as any other reference, mutable or immutable
 
-                        let r = hash_map_mutex_wrapped.get("a");
-                        hash_map_mutex_wrapped.delete("a");
-                        println!("Value: {}", r); // dangling reference
-                        ```
-                * every value has a single owner that determines its lifetime
-                    * example: variable owns its value
-                    * in Java objects never physically contain other objects in Java
-                    * when control leaves the block in which the owner is declared: owner freed—dropped => owned value is dropped too
-            * for pointer it's not always true
-                * example: `NullPointerException`
-        * data is owned by some other variable
-            * borrowing = action of creating a reference
-            * references are immutable by default
-                * cannot modify something we borrowed
-                * you can make them mutable by adding `mut` in front of the variable name
-        * mutable reference
-            * restriction: if you have a mutable reference to a value, you can have no other references to that value
-                * race condition happens when these three behaviors occur
-                    1. two or more pointers access the same data at the same time
-                    1. at least one of the pointers is being used to write to the data
-                    1. there’s no mechanism being used to synchronize access to the data
-                * way to prevent data races at compile time
-    * borrow system can’t protect you from deadlock
-        * best protection is to keep critical sections small
 
 ## structs
 * type that is composed of other type
@@ -653,259 +893,6 @@
             * for example: `HashMap` not implements `Fn`
 * Rust will infer types of a closure’s arguments and return type
 
-## references
-* Rust’s basic pointer type
-    * example: reference to an i32 is a single machine word holding the address of the i32, which may be on the stack or in the heap
-* Rust tracks the ownership and lifetimes of values
-    * mistakes like dangling pointers, double frees, and pointer invalidation are ruled out at compile time
-* non-owning pointer
-    * let access a value without affecting its ownership
-    * no effect on their referents’ lifetimes
-* are never null
-* must never outlive their referents
-* two types: a way to enforce a multiple readers or single writer rule at compile time
-    * rule: either you can read and write the value, or it can be shared by any number of readers, but never both at the same time
-    * `&T`
-        * immutable, shared reference
-            * read but not modify its referent
-        * `x` has the type `T` => `&x` has the type `&T`
-        * in Rust terminology, we say that it borrows a reference to x
-        * are `Copy`
-            * we can have many shared references
-        * no mutable references along shared references
-            * modifying the value they point to is forbidden
-    * `&mut T`
-        * mutable, exclusive reference
-            * both read and modify
-        * `x` has the type `T` => `&mut x` has the type `&mut T`
-        * forbids any other references of any sort to that value active at the same time
-            * in particular: as long as there are shared references to a value, not even its owner can modify it
-        * are not `Copy` (makes no sense)
-        * iterating provides a mut reference to each element
-* permits references to references
-* `*` operator
-    * given a reference `r`, the expression `*r` refers to the value `r` points to
-    * is often omitted, because "dot" operator automatically references or dereferences its left argument
-* `.`
-    * implicitly dereferences its left operand
-    * can also implicitly borrow a reference to its left operand
-        * example: HashMap
-            ```
-            hash_map.insert("one", 1) // desugared into (&mut hashmap_wrapper).insert("one", 1);
-
-            // where fn insert(&mut self, key: K, value: V)
-            ```
-* pass by value vs pass by reference
-    * pass by value = pass a value to a function in a way that moves ownership of the value to the function
-    * pass by reference = pass the function a reference to the value
-* lifetime
-    * used by borrow checker to determine how long references should be valid
-        * example: cannot return reference to temporary value
-            ```
-            fn create_struct<'a>() -> &'a MyStruct {
-                let tmp = String::from("Hello, Rust!");
-
-                &tmp // Error: Cannot return reference to temporary value
-            }
-            ```
-    * variable's lifetime begins when it is created and ends when it is destroyed
-    * facilitates reasoning
-        * example: function with a signature `go(p: &str))` cannot stash its argument anywhere that will outlive the call
-    * are used in two different ways
-        * reference parameter: `&'a T`
-            * means "reference points at a value of type T that is valid for at least the lifetime 'a"
-        * lifetime bound: `U: 'a`
-            * means "all references in T must outlive lifetime 'a"
-            * observation: `T: 'a` includes all `&'a T`
-        * `'static`
-            * usually error values are always string literals that have the `'static` lifetime
-            * indicates that the data pointed to by the reference lives for the remaining lifetime of the running program
-                * rather limiting
-                    ```
-                    struct S {
-                        r: &'static i32 // r can only refer to i32 values that will last for the lifetime of the program
-                    }
-                    ```
-                * example of `T` that can be short lived and long lived
-                    ```
-                    struct MyStruct<'a> {
-                        data: &'a str,
-                    }
-                    fn main() {
-                        {
-                            let data = String::from("Short lived data"); // not static
-                            let slice = &short_lived_data; // not static
-                            let struct = MyStruct { data: short_lived_slice }; // not static as not all references are static
-                            thread::spawn(move || { struct; }); // cannot be moved, otherwise outlive data
-                        }
-                        {
-                            let data = "Long lived data"; // &'static str
-                            let struct = MyStruct { data: long_lived_data }; // MyStruct<'static> as all references are
-                            thread::spawn(move || { struct; }); // can be moved as it lives long enough
-                        }
-                    }
-                    ```
-            * any owned data always passes a 'static lifetime bound, but a reference to that owned data generally does not
-                * reason: owned data is self-contained and needn’t be dropped before any particular variable goes out of scope
-                    * `'static` should really be renamed `'unbounded`
-                * example
-                    ```
-                    fn test_bound<T: 'static>(t: T) {}
-                    fn test_ref<T>(t: &'static T) {}
-
-                    fn main() {
-                        let s1 = String::from("s2"); // not static
-                        {
-                            let s2 = String::from("s2"); // not static
-                            test_bound(s2); // passes the 'static bound check
-                            test_ref(&s2); // borrowed value does not live long enough
-                        }
-                        test_bound(s1); // passes the 'static bound check
-                        test_ref(&s1); // borrowed value does not live long enough
-                    }
-                    ```
-    * is a proof that no reference can possibly outlive the value it points to
-        * examples
-            * cannot return reference to temporary value
-                ```
-                fn create_struct<'a>() -> &'a MyStruct {
-                    let tmp = String::from("Hello, Rust!");
-
-                    &tmp // Error: Cannot return reference to temporary value
-                }
-                ```
-            * value cannot be dropped when its referents are still alive
-            * reference stored in some data structure must enclose that of the data structure
-    * entirely compile-time
-        * at run time, a reference is nothing but an address
-    * every type in Rust has a lifetime
-    * function signatures with lifetimes have a few constraints:
-        * any reference must have an annotated lifetime
-        * any reference being returned must have the same lifetime as an input or be static.
-        * elision
-            * set of rules in Rust that allow the omission of explicit lifetime annotations in function signatures
-            * rules
-                1. each elided lifetime in input position becomes a distinct lifetime parameter
-                    ```
-                    fn print_strings(s1: &str, s2: &str)                        // elided
-                    fn print_strings<'a, 'b>(s1: &'a str, s2: &'b str)          // expanded
-                    ```
-                1. if there is exactly one input lifetime position (elided or not), that lifetime is assigned to all elided output lifetimes
-                    ```
-                    fn as_pair(input1: &str) -> (&str, &str)                    // elided
-                    fn as_pair<'a>(input1: &'a str) -> (&'a str, &'a str)       // expanded
-                    ```
-                1. if there are multiple input lifetime positions, but one of them is &self or &mut self, the lifetime of self is assigned to all elided output lifetimes
-                    ```
-                    pub fn get<Q>(&self, k: &Q) -> Option<&V>                   // elided
-                    pub fn get<'a, 'q, Q>(&'a self, k: &'q Q) -> Option<&'a V>  // expanded
-                    ```
-                1. otherwise, it is an error to elide an output lifetime
-                    ```
-                    fn get_str() -> &str;                                   // ILLEGAL
-                    ```
-* raw pointer
-    * kinds
-        * `*mut T` - mutable raw pointer
-        * `*const T` - immutable raw pointer
-        * either can be cast to another without any restrictions
-            * distinction there serves mostly as a lint
-    * just like pointers in C++
-    * unsafe
-        * Rust makes no effort to track what it points to
-    * may be null, may point to memory that now contains a value of a different type etc
-    * dereference only within an unsafe block
-* fat pointers
-    * is used to refer to references and raw pointers to dynamically sized types (DSTs) – slices or trait objects
-    * contains
-        * the actual pointer to the piece of data
-        * and some additional information at runtime
-            * example: length for slices, pointer to vtable for trait objects
-* smart pointer
-    * data structures that act like a pointer but also have additional information at compile-time
-        * example
-            1. if the compiler should insert some code when the pointer goes out of scope
-            1. ensure its data will always be valid UTF-8
-    * usually implemented using structs that implement the Deref and Drop traits
-        * example: String, Vec<T>, Box<T>
-    * don't always own the data
-        * example: MutexGuard only lets you get a mutable reference to the type inside the Mutex, where as the Mutex has ownership
-    * vs fat pointers
-        * both built-in pointers like &T and smart pointers like Box<T> are thin if T is statically sized, and fat if T is dynamically sized
-*` Box<T>`
-    * simplest way to allocate a value in the heap
-    * `Box::new(v)` allocates some heap space, moves the value v into it, and returns a `Box` pointing to the heap space
-    * if goes out of scope, the memory is freed immediately
-    * vs `RefCell<T>`
-        * Box - borrowing rules’ invariants are enforced at compile time
-        * RefCell - invariants are enforced at runtime (program will panic and exit)
-            * Mutex<T> is the thread-safe version of RefCell<T>
-* `Cow<'a, T>`
-    * means "clone on write"
-    * is an enum that can either be
-        * `Cow::Borrowed`: borrowed reference `(&'a T)`
-        * `Cow::Owned`: owned value `T`
-    * implements `Deref`
-    * to get a mutable reference: `to_mut`
-        * invoking it on `Cow::Borrowed` calls the reference’s `to_owned` method to get its own copy of the referent,
-        changes into a `Cow::Owned`, and borrows a mutable reference to the newly owned value
-            * "clone on write" behaviour
-        * similarly, method `into_owned` promotes the reference to an owned
-        value and then returns it, moving ownership to the caller
-    * problem: return value should be an owned `String` or sometimes it should be a `&'static str`
-        ```
-        fn get_name() -> String {
-            std::env::var("USER")
-                .unwrap_or("whoever you are") // expected `String`, found `&str`
-        }
-        ```
-        solution
-        ```
-        fn get_name() -> Cow<'static, str> {
-            std::env::var("USER")
-                .map(|v| v.into())
-                .unwrap_or("whoever you are".into()) // std has special support for Cow<'a, str>
-        }
-        ```
-    * common use case: return either a statically allocated string constant or a computed string
-        ```
-        fn describe(error: &MyError) -> Cow<'static, str> {
-            match error {
-                MyError::OutOfMemory => "out of memory".into(),
-                MyError::FileNotFound(ref path) => {
-                    format!("file not found: {}", path.display()).into()
-                }
-            }
-        }
-        ```
-* `Rc<T>`
-    * means "reference counter"
-    * non-mutable, non-atomic smart pointer
-        * vs RefCell
-            * RefCell - allows mutable borrows checked at runtime
-            * interior mutability - mutating the value inside an immutable value is the interior mutability pattern
-                * allows to mutate data even when there are immutable references to that data
-                    * normally, this action is disallowed by the borrowing rules
-                * pattern uses unsafe code inside a data structure to bend Rust’s usual rules
-    * call to `Rc::clone` only increments the reference count
-        * doesn’t make a deep copy of all the data
-    * implementation of the Drop trait decreases the reference count automatically when an Rc<T> value goes out of scope
-        * when the count is then 0, and the `Rc` is cleaned up completely
-* `Arc<T>`
-    * atomically reference counted
-    * like Rc<T> but safe to use in concurrent situations
-* CQRS
-    * command
-        * when you create / insert into a data structure, you move the data in (not reference &)
-        * when you run a command to change data, move the memory around (no reference &)
-    * query
-        * use references
-    * example: `HashMap`
-        ```
-        fn insert(&mut self, key: K, value: V) // command
-        fn get(&self, key: &K) -> Option<&V> // query
-        ```
-
 ## pattern matching
 * can be thought of as a generalization of the switch statement
     * comparing objects not just by value (or overloaded equality operator, etc.) but by structure
@@ -1300,11 +1287,6 @@
                 ...
             } // converts specific errors to GatewayError
             ```
-* dot
-    * The unary `*` operator is used to access the value pointed to by a reference. As we’ve
-      seen, Rust automatically follows references when you use the . operator to access a
-      field or method, so the * operator is necessary only when we want to read or write the
-      entire value that the reference points to.
 * auto converting
     * `&String => &str`
     * `&Vec<i32> => &[i32]`
