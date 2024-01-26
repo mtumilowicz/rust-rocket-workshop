@@ -1,12 +1,19 @@
+use std::sync::Arc;
 use rocket::http::{ContentType, Status};
 use rocket::local::blocking::Client;
+use rocket::{Build, Rocket};
 use rocket::serde::json::{serde_json, Value};
 use rocket::serde::json::serde_json::json;
 use rust_rocket_workshop::app;
+use rust_rocket_workshop::domain::customer::CustomerService;
+use rust_rocket_workshop::domain::id::IdService;
+use rust_rocket_workshop::infrastructure::customer_config::CustomerInMemoryRepository;
+use rust_rocket_workshop::infrastructure::id_config::UuidRepository;
+
 #[test]
 fn test_create_and_get_customer() {
     // given
-    let rocket = app::server();
+    let rocket = create_server();
     let client = Client::tracked(rocket).expect("valid rocket instance");
 
     // and
@@ -49,7 +56,7 @@ fn test_create_and_get_customer() {
 #[test]
 fn test_get_nonexistent_customer() {
     // given
-    let rocket = app::server();
+    let rocket = create_server();
     let client = Client::tracked(rocket).expect("valid rocket instance");
 
     // when
@@ -58,4 +65,12 @@ fn test_get_nonexistent_customer() {
 
     // then
     assert_eq!(get_response.status(), Status::NotFound);
+}
+
+fn create_server() -> Rocket<Build> {
+    let id_service = Arc::new(IdService::new(UuidRepository));
+    let customer_service = Arc::new(CustomerService::new(id_service, CustomerInMemoryRepository::new()));
+    app::server(
+        customer_service
+    )
 }

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use rocket::http::Status;
 use rocket::{get, post};
 use rocket::response::status::{Created, Custom};
@@ -61,7 +62,7 @@ impl From<CustomerError> for Custom<String> {
 #[post("/customers", data = "<request>")]
 pub async fn create_customer(
     request: Json<NewCustomerApiInput>,
-    customer_service: &rocket::State<CustomerService>,
+    customer_service: &rocket::State<Arc<CustomerService>>,
 ) -> Result<Created<Json<CustomerApiOutput>>, Custom<String>> {
     let new_customer: NewCustomerCommand = request.into_inner().into();
     customer_service.create(new_customer).await
@@ -75,7 +76,7 @@ pub async fn create_customer(
 #[get("/customers/<customer_id>")]
 pub async fn get_customer(
     customer_id: String,
-    service: &rocket::State<CustomerService>,
+    service: &rocket::State<Arc<CustomerService>>,
 ) -> Option<Json<CustomerApiOutput>> {
     let customer_id = &customer_id.into();
     service.get_by_id(customer_id).await
