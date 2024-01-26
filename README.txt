@@ -92,6 +92,7 @@
     * https://www.reddit.com/r/rust/comments/v1z6bx/what_is_a_cow/
     * https://blog.logrocket.com/using-cow-rust-efficient-memory-utilization/
     * https://rahul-thakoor.github.io/rust-raw-string-literals/
+    * https://www.shakacode.com/blog/thiserror-anyhow-or-how-i-handle-errors-in-rust-apps/
 
 ## rust
 * statically typed language
@@ -479,6 +480,7 @@
         * example: file not found
         * should implement the `std::error::Error` trait
             * can be derived: `#[derive(Error)]`
+            * guaranteed that such error has human-readable and debuggable representations
         * part of `Result`
             * equivalent of `Either`
             * equivalent of try/catch in other languages
@@ -1266,7 +1268,7 @@
         ```
         * `unconditional_panic` allows the code to use the panic! macro without triggering a warning about an unconditional panic
     * not recommended
-        * when expected error we should use `Result`
+        * when error is expected we should use `Result`
         * usually panic should be considered a failure
     * Rust standard library itself includes tests that validate panic behavior
         ```
@@ -1471,8 +1473,8 @@
 * is a web framework for Rust
     * provides routing, pre-processing of requests, and post-processing of responses
 * `#[launch]`
-    * generates a main function that launches a returned Rocket<Build>
-    * automatically initializes an async runtime and launches the function’s returned instance
+    * generates a main function that launches a returned `Rocket<Build>`
+    * automatically initializes an `async` runtime and launches the function’s returned instance
     * example
         ```
         #[launch] // compiled to #[rocket::main]
@@ -1480,21 +1482,28 @@
             rocket::build() // compiled to rocket().launch().await;
         }
         ```
-* fully asynchronous core powered by tokio
+* fully asynchronous, powered by tokio
     * every request is handled by an asynchronous task which internally calls one or more request handlers
     * tasks are multiplexed on a configurable number of worker threads
-        * runtime can switch between tasks in a single worker thread iff (if and only if) an await point in reached
-            * context switching is cooperative, not preemptive
-            * if an await point is not reached, no task switching can occur
-                * important that await points occur periodically in a task so that tasks waiting to be scheduled are not starved
-* blocking operation => `rocket::tokio::task::spawn_blocking` (execute the computation in its own thread)
+        * runtime can switch between tasks in a single worker thread iff (if and only if) an `await` point is reached
+            * context switching is cooperative (switches occur when a task explicitly yields control to the scheduler)
+                * not preemptive (switches are done independently of the tasks' cooperation)
+            * if an `await` point is not reached, no task switching can occur
+                * important that `await` points occur periodically
+* blocking operation => use `rocket::tokio::task::spawn_blocking(FnOnce)`
+    * execute the computation in its own thread
     * example: long computations
-    * Note that the number of max_blocking_threads also affects how your spawn_blocking tasks execute. The default is 512, so you're unlikely to hit it unless you've got a lot of work to do, but if it does come up, you might want to impose an explicit limit in your application logic, because tasks waiting to run still take up memory, network servers may not appreciate too many incoming connections, and you've only got so many CPU cores anyway — so at that point you may find that overall throughput is improved by intentionally queueing things within your application logic rather than throwing everything you've got at Tokio.
+    * number of `max_blocking_threads` also affects how your `spawn_blocking` tasks execute
+        * default is 512, so you're unlikely to hit it
 * configuration: `Rocket.toml`
-    * `debug` and `release` are the default profiles for the respective Rust compilation profile
-    * `default` profile with fallback values for all profiles
-        * defining most configuration
-    * `global` profile with overrides for all profiles
+    * profiles
+        * `debug` and `release`
+            * profiles for the respective Rust compilation profile
+        * `default`
+            * profile with fallback values for all profiles
+            * defining most configuration
+        * `global`
+            * profile with overrides for all profiles
     * Based on Figment
         * Figment is a library for declaring and combining configuration sources and extracting typed values from the combined sources
     * The `workers` parameter sets the number of threads used for parallel task execution
@@ -1557,5 +1566,16 @@
     ```
 
 ## thiserror
+* simplifies the implementation of the Error trait
+* the same thing as if you had written an implementation of `std::error::Error` by hand
+* `Display` impl is generated for your error if you provide `#[error("...")]`
+    * support a shorthand for interpolating fields
+        * `#[error("{var}")]` => `write!("{}", self.var)`
+        * `#[error("{0}")]` => `write!("{}", self.var)`
+* `From` impl is generated for each variant containing a `#[from]` attribute
 
 ## mockall
+* provides tools to create mock versions of almost any trait or struct
+* `#[automock]` can mock most traits, or structs that only have a single impl block
+* instantiate the mock struct with its `new` or `default` method
+* record expectations
