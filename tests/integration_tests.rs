@@ -54,6 +54,40 @@ fn test_create_and_get_customer() {
 }
 
 #[test]
+fn test_create_validations() {
+    // given
+    let rocket = create_server();
+    let client = Client::tracked(rocket).expect("valid rocket instance");
+
+    // and
+    let new_customer_input = r#"
+        {
+            "name": ""
+        }
+    "#;
+
+    // when
+    let create_response = client.post("/api/customers")
+        .header(ContentType::JSON)
+        .body(new_customer_input)
+        .dispatch();
+
+    // then
+    assert_eq!(create_response.status(), Status::UnprocessableEntity);
+    let result: Value = serde_json::from_str(&create_response.into_string().unwrap()).unwrap();
+    let expected_result: Value = json!(
+        {
+            "data": {
+                "name": [
+                    "cannot be empty"
+                ]
+            }
+        }
+    );
+    assert_eq!(&result, &expected_result);
+}
+
+#[test]
 fn test_get_nonexistent_customer() {
     // given
     let rocket = create_server();
