@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::sync::Arc;
 use rocket::http::Status;
 use rocket::{get, post};
@@ -59,11 +58,9 @@ impl From<CustomerError> for Custom<Json<ErrorApiOutput>> {
     fn from(value: CustomerError) -> Self {
         match value {
             CustomerError::CustomerAlreadyExist(customer_id) => {
-                let mut data = HashMap::new();
-                data.insert("error", vec![Cow::Owned(format!("Customer with id = {customer_id} already exists"))]);
-
-                let output = Json(ErrorApiOutput::new(data));
-                Custom(Status::BadRequest, output)
+                let message = format!("Customer with id = {customer_id} already exists");
+                let output = ErrorApiOutput::error(Cow::Owned(message));
+                Custom(Status::BadRequest, Json(output))
             }
         }
     }

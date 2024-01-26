@@ -31,6 +31,13 @@ impl ErrorApiOutput {
 
         ErrorApiOutput::new(error_map)
     }
+
+    pub fn error(message: Cow<'static, str>) -> ErrorApiOutput {
+        let mut data = HashMap::new();
+        data.insert("error", vec![message]);
+
+        ErrorApiOutput::new(data)
+    }
 }
 
 impl From<ErrorApiOutput> for Custom<Json<ErrorApiOutput>> {
