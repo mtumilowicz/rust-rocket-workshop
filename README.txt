@@ -90,6 +90,8 @@
     * https://anooppoommen.medium.com/lifetimes-in-rust-7f2331be998b
     * https://www.reddit.com/r/rust/comments/18e3oq0/why_do_lifetimes_need_to_be_leaky/
     * https://www.reddit.com/r/rust/comments/v1z6bx/what_is_a_cow/
+    * https://blog.logrocket.com/using-cow-rust-efficient-memory-utilization/
+    * https://rahul-thakoor.github.io/rust-raw-string-literals/
 
 ## rust
 * statically typed language
@@ -844,7 +846,7 @@
 * Rust will infer types of a closure’s arguments and return type
 
 ## pattern matching
-* can be thought of as a generalization of the switch statement
+* generalization of the switch statement
     * comparing objects not just by value (or overloaded equality operator, etc.) but by structure
 * example
     ```
@@ -855,99 +857,115 @@
         MyEnum::VariantC { name, age } => ...
     }
     ```
-* problem: move when we want borrow
-    * example
-        ```
-        let query_params: Vec<(String, String)> = vec![("page".to_string(), "1".to_string())]
+* shorthand for a match with one pattern
+    ```
+    if let pattern = expr {
+        block1
+    } else {
+        block2
+    }
+    ```
+    is equivalent of
+    ```
+    match expr {
+        pattern => { block1 }
+        _ => { block2 }
+    }
+    ```
+* binding patterns
+    * to service better ergonomics, patterns operate in different binding modes
+        * default binding mode starts in "move" mode which uses move semantics
+            * problem: move when we want borrow
+                * example
+                    ```
+                    let query_params: Vec<(String, String)> = vec![("page".to_string(), "1".to_string())]
 
-        for &(name, value) in &query_params { // compilation error: cannot move out of a shared reference - type of name and value is String
-            println!("{}={}", name, value);
-        }
-        ```
-        * reason: attempt to move those items into the loop scope
-            * however due to the way the vector is iterated over (&query_params), we’re only borrowing each item
-    * solution: `ref` pattern
-        ```
-        for &(ref name, ref value) in &query_params { ... }
-        ```
-        * note that we cannot use `for &(&name, &value)`
-        * how parts of the matched value are captured by the pattern’s bindings:
-            * without `ref`: they are moved into the match arms
-            * with `ref`: they are borrowed instead and represented as references
-    * `&` vs `ref`
-        * `&` denotes that your pattern expects a reference to an object
-            * part of the pattern
-            * `&Foo` matches different objects than `Foo` does
-            * Rust compiler knows we’re looking for references to certain objects, and not for the objects themselves
-        * `ref` indicates that you want a reference to an unpacked value
-            * annotates pattern bindings to make them borrow rather than move
-            * not part of the pattern
-            * `Foo(ref foo)` matches the same objects as `Foo(foo)`
-        * why distinction is important?
-            * in other places Rust is perfectly happy to blur the gap between references and actual objects
-                * example: calling most of their methods
-            * pattern matching is destructive operation
-                * anything we apply match (or similar construct) to will be moved into the block by default
-                * will prevent any subsequent moves and essentially consume the value
+                    for &(name, value) in &query_params { // compilation error: cannot move out of a shared reference - type of name and value is String
+                        println!("{}={}", name, value);
+                    }
+                    ```
+                * solution: `ref` pattern
+                    ```
+                    for &(ref name, ref value) in &query_params { ... }
+                    ```
+        * references / mutable references set binding mode to `ref` / `mut ref`
+            * called match ergonomics: https://rust-lang.github.io/rfcs/2005-match-ergonomics.html
+            * `ref` indicates that you want a reference
+                * annotates pattern bindings to make them borrow rather than move
+                * not part of the pattern
+                    * `Foo(ref foo)` matches the same objects as `Foo(foo)`
+            * example: iteration
+                * by value
+                    * consumes the collection
+                    * example: `for (k, v) in map`
+                * over shared reference
+                    * produces references
+                    * example: `for (k, v) in &map`
+                * over mut reference
+                    * produces mut references
+                    * example: `for (k, v) in &mut map`
+                        * produces `(&K, &mut V)` pairs
+                        * there’s no way to get mut access to keys stored in a map
+                            * entries are organized by their keys
 * `|` can be used to combine several patterns in a single match arm
 
 ## String vs &str vs str
 * UTF-8
     * encodes a character as a sequence of one to four bytes
+        * indexing is not intuitive
+            * `str[idx]` would need to return byte
     * restrictions
         * only the shortest encoding for any given code point is considered well-formed
             * example: can’t spend four bytes encoding a code point that would fit in three
-        * must not encode numbers from `0xd800` through `0xdfff` or beyond `0x10ffff`
-            * either reserved for noncharacter purposes or outside Unicode’s range entirely
+    * char-by-char comparison does not always give the expected answers
+        * example: UTF-8 encoding
+            * `th\u{e9}` and `the\u{301}` are both valid Unicode representations for thé
+            * `th\u{e9}` = `0xC3 0xA9`
+            * `the\u{301}` = `0xC3 0x81`
 * Rust has only one string type in the core language: string slice `str`
     * usually seen in its borrowed form `&str`
-    * sequence of Unicode characters stored as a well-formed UTF-8 encoding
-        * simple char-by-char comparison does not always give the expected answers
-            * example: `th\u{e9}` and `the\u{301}`` are both valid Unicode representations for thé
-                * Rust treats them as two completely distinct strings
-        * don’t support indexing
-            * unintuitive
-            * UTF-8 may take 1 to 4 bytes, so `str[idx]` would need to return byte
+    * stored as a well-formed UTF-8 encoding (of Unicode characters)
 * for Java people:
-    * Rust' String === StringBuilder
-    * Rust's &str === (immutable) string
+    * `String` === `StringBuilder`
+    * `&str` === (immutable) string
 * `String`
-    * implemented as a wrapper around a Vec<u8>
+    * implemented as a wrapper around a `Vec<u8>`
         * ensures the vector’s contents are always well-formed UTF-8
     * is provided by Rust’s standard library rather than coded into the core language
     * lives on the heap and therefore is mutable and can alter its size and contents
+        * overallocates for efficiency
         * it is very slow
     * can't be created at compile-time => there must be a runtime function call to do that allocation
         * `String::from("literal")`
     * `.to_string()` vs `.to_owned()`
-        * `.to_owned()` does the same as `.to_string()` but works for some other types as well
-    * vs `&str`
-        * `String` is an Object, `&str` is a pointer at a part of object
-        * similar to the relationship between by-value `T` and by-reference `&T` for general types
+        * `to_owned()` does the same as `to_string()`
+        * `to_owned()` is part of the `ToOwned` trait
     * vs `Box<str>`
         * `Box<str>` owns a `str` (unlike the `&str`)
         * runtime representation is the same as a `&str`
-        * can be seen as a fixed-length String that cannot be resized
+        * can be seen as a fixed-length `String` that cannot be resized
             * cannot resize `str` because it does not know its capacity
-            * you’d need to reallocate every time you push to the string, but String overallocates for efficiency
+            * you'd need to reallocate every time you push to the string
 * `&str`
+    * vs `String`
+        * `String` is an object, `&str` is a pointer at a part of the object
     * vs `&String`
         * `&str` is a reference directly into the backing storage of the String, while `&String` is a reference to the "wrapper" object
         * `&str` can be used for substrings, i.e. they are slices
-            * `&String&String` references always the whole string
+            * `&String` references always the whole string
     * pronounced "stir" or "string slice"
-    * reference to a run of UTF-8 text
+    * reference to a sequence of UTF-8 text
         * owned by someone else: it "borrows" the text
     * fat pointer like other slice references
-        * contains address of the actual data and its length
-    * immutable by default
+        * contains address of the actual data and its length (twice the length of a `usize`)
+    * immutable
     * type `&mut str` does exist, but it is not very useful
         * slice cannot reallocate its referent
             * almost any operation on UTF-8 can change its overall byte length
         * only available operations: `make_ascii_uppercase` and `make_ascii_lowercase`
             * by definition: modify the text in place and affect only single-byte characters
-        * is very much like &[T]
-    * raw syntax
+    * is very much like `&[T]`
+    * raw syntax: allow to write the literal without requiring escapes
         ```
         let json_data: &str = r#"
             {
@@ -959,7 +977,7 @@
             }
         "#;
         ```
-    * useful to be able to to have multiple different substrings of a String without having to copy
+    * useful to be able to to have multiple different substrings of a `String` without having to copy
         * example
             ```
             let string: String   = "a string".to_string();
@@ -968,13 +986,15 @@
             ```
     * `&static str`
         * fastest one but also the less flexible
+        * value needs to be known at compile time
             * literals evaluate to type `&'static str`
-        * cannot be modified and its value needs to be known at compile time
-        * compiler copies the literal into the crate's read-only static space and generates a forever-valid reference to that value
+        * cannot be modified
+        * compiler copies it into the crate's read-only static space
+        * forever-valid reference
 * `str`
     * fixed-length, stack or heap allocated string slice
     * is an immutable sequence of UTF-8 bytes of dynamic length somewhere in memory
-    * we can’t create a variable of type str
+    * we can’t create a variable of type `str`
         * explanation: all values of a type must use the same amount of memory
             * example
                 ```
@@ -983,13 +1003,6 @@
                  // s1 needs 12 bytes of storage and s2 needs 15
                 ```
         * always in its borrowed form: `&str`
-            * size of a &str value at compile time: it’s twice the length of a usize (address of str and its length)
-* rule of thumb
-    * use String if you need owned string data (like passing strings to other threads, or building them at runtime)
-    * use &str if you only need a view of a string
-    * functions arguments
-        * pass &str if function does something with a string without needing to stash it away somewhere
-        * pass `String` if function modifies or needs to store it for later
 * formatting macros
     * `format!` builds `Strings`
     * `println!` writes to the standard output
@@ -1013,20 +1026,19 @@
     * example: tokio
     * why it is not part of std?
         * 3rd party crates can typically afford to move faster
-        * different Async runtimes will be better for different use cases
+        * different runtimes for different use cases
             * example: tokio is a great library for things like web servers, but not ideal for microcontrollers
-        * Rust is often used to do embedded software, where some functions of the async runtime
-        are actually provided by the environment, and the other features are not desired
+        * in embedded software some async runtime functions are actually provided by the environment
             * example: macroquad game engine, which has async as a useful abstraction for doing animation
             frame timing, but does not require an async runtime
-        * green threading model was remove before 1.0
+        * green threading model was removed before 1.0
 * example
     ```
-    async fn async_function() { ... } // async definition
+    async fn async_function() -> String { ... } // async definition
 
     #[tokio::main] // async runtime
     async fn main() {
-        async_function().await; // wait
+        let s: String = async_function().await; // block
     }
     ```
 * `std::future::Future`
@@ -1043,50 +1055,39 @@
         }
 
         enum Poll<T> {
-            Ready(T),
+            Ready(T), // once a future has returned `Poll::Ready` should be never be polled again
             Pending,
         }
         ```
-    * rule: once a future has returned Poll::Ready => never be polled again
 
 ## collections
-* iteration
-    * by value
-        * consumes the collection
-        * example: `for (k, v) in map`
-    * over shared reference
-        * produces references
-        * example: `for (k, v) in &map`
-    * over mut reference
-        * produces mut references
-        * example: `for (k, v) in &mut map`
-            * produces `(&K, &mut V)` pairs
-            * there’s no way to get mut access to keys stored in a map, because
-                  the entries are organized by their keys
 * modification
     * Rust uses moves to avoid deep-copying values
     * example: `Vec<T>::push(item)` takes its argument by value
         * value is moved into the vector
-* usually are not not Copy
+* usually are not `Copy`
     * they can’t be, since they owns a dynamically allocated table
 * array
-    * have a fixed length (known at compile time)
-    * useful when you want your data allocated on the stack rather than the heap
+    * allocated on stack
+        * have a fixed length (known at compile time)
+        * arrays of types that implement the `Copy` trait themselves are also `Copy`
 * `Vec<T>`
+    * `T` needs to be known at compile time to know exactly how much memory on the heap will be needed to store each element
+        * example: `Vec<dyn MyTrait>` will not compile, should be used `Vec<Box<dyn MyTrait>>` or `Vec<&dyn MyTrait>`
     * memory
         * three fields
             * the length
             * the capacity
-                * manages the capacity for you, automatically allocating a larger buffer and moving the elements into it when more space is needed
+                * manages the capacity automatically allocating a larger buffer and moving the elements into it when more space is needed
             * pointer to a heap allocation where the elements are stored
                 * created and owned by the `Vec<T>`
             * elements are stored in a contiguous, heap-allocated chunk of memory
-    * protection against modifications during traversal
+    * compile time protection against modifications during traversal
         * java digression: `ConcurrentModificationException`
         * example
             ```
             let mut v = vec![10];
-            for (index, &val) in v.iter().enumerate() { borrows a shared (non-mut) reference to the vector
+            for (index, &val) in v.iter().enumerate() { // borrows a shared (non-mut) reference to the vector
                 if val > 10 {
                     v.remove(index); // can't borrow `v` as mutable
                 }
@@ -1096,13 +1097,11 @@
             ```
             v.retain(|&val| val <= 10)
             ```
-    * types needs to be known at compile time to know exactly how much memory on the heap will be needed to store each element
     * `VecDeque<T>` - double-ended queue (deque)
 * `HashMap<K, V>`
     * memory
         * keys, values, and cached hash codes are stored in a single heap-allocated table
-        * adding entries eventually forces the HashMap to allocate a larger table and move all
-          the data into it
+        * manages the capacity automatically
     * useful methods
         * get or insert
             ```
@@ -1115,18 +1114,17 @@
         * modify or insert
             ```
             balances.entry(id)
-            .and_modify(|count| *count += 1)
-            .or_insert(1);
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
             ```
-    * `BTreeMap` - maintains its keys in sorted order.
-        * Rust standard library uses B-trees rather than balanced binary trees because B-trees
-        are faster on modern hardware
+    * `BTreeMap` - maintains its keys in sorted order
+        * std uses B-trees rather than balanced binary trees because B-trees are faster on modern hardware
             * binary tree may use fewer comparisons per search than a B-tree, but searching a B-tree has better locality
             * memory accesses are grouped together rather than scattered across the whole heap
                 * makes CPU cache misses rarer
 * Slice
     * is a region of an array or vector
-    * notation: `[T]`
+    * notation: `&[T]`
     * example
         ```
         fn do_something(n: &[String]) { // either a vector or an array
@@ -1141,20 +1139,6 @@
 * other: `LinkedList<T>`, `BinaryHeap<T>`, `HashSet<T>`, `BTreeSet<T>`
 
 ## useful syntax
-* traversing collections
-    * with index
-        ```
-        let my_vec = vec!["apple", "banana", "cherry"];
-
-        for (index, value) in &my_vec.into_iter().enumerate() {
-            println!("Index: {}, Value: {}", index, value);
-        }
-        ```
-        * `IntoIterator::into_iter` convert its operand &v into an iterator
-    * with destructuring
-        ```
-        for (&key, &value) in &my_map { ... }
-        ```
 * shadowing of let
     ```
     fn main() {
@@ -1165,30 +1149,6 @@
         count += 1; // 37
     }
 
-    ```
-* if let
-    * example
-        ```
-        if let Some(cookie) = request.session_cookie {
-            return restore_session(cookie);
-        }
-        ```
-    * shorthand for a match with one pattern
-        ```
-        if let pattern = expr {
-            block1
-        } else {
-            block2
-        }
-        ```
-        is equivalent of
-        ```
-        match expr {
-            pattern => { block1 }
-            _ => { block2 }
-        }
-        ```
-    ```
     ```
 * return types
     * return without a value is shorthand for return ()
