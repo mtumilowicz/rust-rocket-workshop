@@ -1,5 +1,5 @@
 # to override entries use env variable: ROCKET_{PARAM}, example: ROCKET_PORT=9092
 [debug] # env var ROCKET_PROFILE=debug
 address = "0.0.0.0"
-port = 9091
+port = 8000
 orders_url = "api/orders" # ROCKET_ORDERS_URL="api/orders2"

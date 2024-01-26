@@ -1,14 +1,18 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use rocket::http::Status;
 use rocket::{get, post};
 use rocket::response::status::{Created, Custom};
 use rocket::serde::json::Json;
 use serde_derive::{Deserialize, Serialize};
+use validator::{Validate};
 use crate::domain::customer::{Customer, CustomerError, CustomerService, NewCustomerCommand};
+use crate::gateway::error::{ErrorApiOutput};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Validate)]
 #[serde(crate = "rocket::serde")]
 pub struct NewCustomerApiInput {
+    #[validate(length(min = 1, message = "cannot be empty"))]
     name: String,
 }
 
@@ -50,11 +54,16 @@ impl From<Customer> for CustomerApiOutput {
     }
 }
 
-impl From<CustomerError> for Custom<String> {
+impl From<CustomerError> for Custom<Json<ErrorApiOutput>> {
     fn from(value: CustomerError) -> Self {
         match value {
-            CustomerError::CustomerAlreadyExist(customer_id) =>
-                Custom(Status::BadRequest, format!("customer with id = {customer_id} already exists"))
+            CustomerError::CustomerAlreadyExist(customer_id) => {
+                let mut data = HashMap::new();
+                data.insert("error".to_string(), vec![format!("Customer with id = {} already exists", customer_id)]);
+
+                let output = Json(ErrorApiOutput::new(data));
+                Custom(Status::BadRequest, output)
+            }
         }
     }
 }
@@ -63,7 +72,8 @@ impl From<CustomerError> for Custom<String> {
 pub async fn create_customer(
     request: Json<NewCustomerApiInput>,
     customer_service: &rocket::State<Arc<CustomerService>>,
-) -> Result<Created<Json<CustomerApiOutput>>, Custom<String>> {
+) -> Result<Created<Json<CustomerApiOutput>>, Custom<Json<ErrorApiOutput>>> {
+    request.validate().map_err(|err| ErrorApiOutput::from(err))?;
     let new_customer: NewCustomerCommand = request.into_inner().into();
     customer_service.create(new_customer).await
         .map(|customer| {
