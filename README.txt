@@ -706,7 +706,25 @@
         * use case: performing error handling
             * related to the `?` operator
             * resolves composition of distinct error types
-                * implicit conversion on the error value using the `From` trait
+                * example: implicit conversion on the error value using the `From` trait
+                    ```
+                    pub fn fetch_data_from_network(url: &str) -> Result<String, NetworkError> { ... }
+                    pub fn read_file_contents(file_path: &str) -> Result<String, FileError> { ... }
+
+                    pub enum AppError {
+                        FileOperationFailed,
+                        NetworkOperationFailed,
+                    }
+
+                    impl From<FileError> for GatewayError { ... }
+                    impl From<NetworkError> for GatewayError { ... }
+
+                    pub foo() -> Result<(), GatewayError> {
+                        let file_contents = file_parser::read_file_contents("example.txt")?; // values go through the `From` trait to convert them into the return error type
+                        let network_data = network::fetch_data_from_network("https://example.com")?;
+                        ...
+                    } // converts specific errors to GatewayError
+                    ```
         * Rust provides `Into` implementation for types that have provided `From` implementation
             * `Into` should be used, in cases where `From` cannot be implemented
                 * example: gateway inputs that results in the same command
@@ -1151,7 +1169,7 @@
 
     ```
 * return types
-    * return without a value is shorthand for return ()
+    * return without a value is shorthand for return `()`
     * if the last expression isn’t followed by a semicolon, its value is the function’s return value
     * `!` - expressions that don’t finish
         ```
@@ -1176,26 +1194,6 @@
                 Ok(f) => f,
                 Err(err) => return Err(err)
             };
-            ```
-    * error values go through the `From trait` to convert them into the return error type
-        * example
-            ```
-            pub fn fetch_data_from_network(url: &str) -> Result<String, NetworkError> { ... }
-            pub fn read_file_contents(file_path: &str) -> Result<String, FileError> { ... }
-
-            pub enum AppError {
-                FileOperationFailed,
-                NetworkOperationFailed,
-            }
-
-            impl From<FileError> for GatewayError { ... }
-            impl From<NetworkError> for GatewayError { ... }
-
-            pub foo() -> Result<(), GatewayError> {
-                let file_contents = file_parser::read_file_contents("example.txt")?;
-                let network_data = network::fetch_data_from_network("https://example.com")?;
-                ...
-            } // converts specific errors to GatewayError
             ```
 * auto converting
     * `&String => &str`
@@ -1238,7 +1236,7 @@
     * `.rs` files that live in a `tests` directory alongside `src`
     * requires `src/lib.rs` file
         * only library crates expose functions that other crates can use
-        * binary crate with only `src/main.rs` file => can’t create integration tests in the tests
+        * binary crate with only `src/main.rs` file => can’t create integration tests
             * binary crates are meant to be run on their own
     * don’t need to annotate any code in `tests/integration_test.rs` with `#[cfg(test)]`
         * cargo compiles files in this directory only when we run `cargo test`
