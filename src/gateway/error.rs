@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use rocket::http::Status;
 use rocket::response::status::Custom;
@@ -8,11 +9,11 @@ use validator::{ValidationErrors};
 
 #[derive(Serialize)]
 pub struct ErrorApiOutput {
-    data: HashMap<&'static str, Vec<String>>
+    data: HashMap<&'static str, Vec<Cow<'static, str>>>
 }
 
 impl ErrorApiOutput {
-    pub fn new(data: HashMap<&'static str, Vec<String>>) -> Self {
+    pub fn new(data: HashMap<&'static str, Vec<Cow<'static, str>>>) -> Self {
         ErrorApiOutput { data }
     }
 
@@ -20,9 +21,9 @@ impl ErrorApiOutput {
         let mut error_map = HashMap::new();
 
         for (field, validation_errors) in errors.field_errors() {
-            let error_messages: Vec<String> = validation_errors
+            let error_messages = validation_errors
                 .iter()
-                .flat_map(|error| error.message.clone().map(|msg| msg.to_string()))
+                .flat_map(|error| error.message.clone())
                 .collect();
 
             error_map.insert(field, error_messages);
