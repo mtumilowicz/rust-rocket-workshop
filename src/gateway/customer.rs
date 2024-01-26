@@ -59,7 +59,7 @@ impl From<CustomerError> for Custom<Json<ErrorApiOutput>> {
         match value {
             CustomerError::CustomerAlreadyExist(customer_id) => {
                 let mut data = HashMap::new();
-                data.insert("error".to_string(), vec![format!("Customer with id = {} already exists", customer_id)]);
+                data.insert("error", vec![format!("Customer with id = {} already exists", customer_id)]);
 
                 let output = Json(ErrorApiOutput::new(data));
                 Custom(Status::BadRequest, output)
