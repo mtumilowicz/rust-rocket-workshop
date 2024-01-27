@@ -8,13 +8,11 @@ use validator::{ValidationErrors};
 
 
 #[derive(Serialize)]
-pub struct ErrorApiOutput {
-    data: HashMap<&'static str, Vec<Cow<'static, str>>>
-}
+pub struct ErrorApiOutput(HashMap<&'static str, Vec<Cow<'static, str>>>);
 
 impl ErrorApiOutput {
     pub fn new(data: HashMap<&'static str, Vec<Cow<'static, str>>>) -> Self {
-        ErrorApiOutput { data }
+        ErrorApiOutput(data)
     }
 
     pub fn from(errors: ValidationErrors) -> ErrorApiOutput {
@@ -32,9 +30,9 @@ impl ErrorApiOutput {
         ErrorApiOutput::new(error_map)
     }
 
-    pub fn error(message: Cow<'static, str>) -> ErrorApiOutput {
+    pub fn for_key(key: &'static str, message: Cow<'static, str>) -> ErrorApiOutput {
         let mut data = HashMap::new();
-        data.insert("error", vec![message]);
+        data.insert(key, vec![message]);
 
         ErrorApiOutput::new(data)
     }

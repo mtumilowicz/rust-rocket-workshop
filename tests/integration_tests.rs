@@ -2,7 +2,7 @@ use std::sync::Arc;
 use rocket::http::{ContentType, Status};
 use rocket::local::blocking::Client;
 use rocket::{Build, Rocket};
-use rocket::serde::json::{serde_json, Value};
+use rocket::serde::json::{Value};
 use rocket::serde::json::serde_json::json;
 use uuid::Uuid;
 use rust_rocket_workshop::app;
@@ -42,7 +42,6 @@ fn test_create_and_get_customer() {
     assert_eq!(get_response.status(), Status::Ok);
 
     // and
-    let result: Value = serde_json::from_str(&get_response.into_string().unwrap()).unwrap();
     let expected_result: Value = json!(
         {
             "id": customer_id,
@@ -51,7 +50,7 @@ fn test_create_and_get_customer() {
         }
     );
 
-    assert_eq!(&result, &expected_result);
+    assert_eq!(get_response.into_json::<Value>(), Some(expected_result));
 }
 
 #[test]
@@ -75,17 +74,14 @@ fn test_create_validations() {
 
     // then
     assert_eq!(create_response.status(), Status::UnprocessableEntity);
-    let result: Value = serde_json::from_str(&create_response.into_string().unwrap()).unwrap();
     let expected_result: Value = json!(
         {
-            "data": {
-                "name": [
-                    "cannot be empty"
-                ]
-            }
+            "name": [
+                "cannot be empty"
+            ]
         }
     );
-    assert_eq!(&result, &expected_result);
+    assert_eq!(create_response.into_json::<Value>(), Some(expected_result));
 }
 
 #[test]
@@ -115,8 +111,14 @@ fn test_get_customer_non_uuid() {
     // then
     assert_eq!(response.status(), Status::UnprocessableEntity);
     assert_eq!(response.content_type(), Some(ContentType::JSON));
-    let expected_error = json!({"data": { "error": ["customer_id should be uuid"] } });
-    assert_eq!(response.into_json::<Value>(), Some(expected_error));
+    let expected_result = json!(
+        {
+            "customer_id": [
+                "is not a correct uuid"
+            ]
+        }
+    );
+    assert_eq!(response.into_json::<Value>(), Some(expected_result));
 }
 
 fn create_server() -> Rocket<Build> {
