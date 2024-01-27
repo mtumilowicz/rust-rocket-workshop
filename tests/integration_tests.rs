@@ -4,6 +4,7 @@ use rocket::local::blocking::Client;
 use rocket::{Build, Rocket};
 use rocket::serde::json::{serde_json, Value};
 use rocket::serde::json::serde_json::json;
+use uuid::Uuid;
 use rust_rocket_workshop::app;
 use rust_rocket_workshop::domain::customer::CustomerService;
 use rust_rocket_workshop::domain::id::IdService;
@@ -92,13 +93,30 @@ fn test_get_nonexistent_customer() {
     // given
     let rocket = create_server();
     let client = Client::tracked(rocket).expect("valid rocket instance");
+    let not_existing_id = Uuid::new_v4().to_string();
 
     // when
-    let get_response = client.get("/api/customers/nonexistent_id")
+    let get_response = client.get(format!("/api/customers/{not_existing_id}"))
         .dispatch();
 
     // then
     assert_eq!(get_response.status(), Status::NotFound);
+}
+
+#[test]
+fn test_get_customer_non_uuid() {
+    // given
+    let rocket = create_server();
+    let client = Client::tracked(rocket).expect("valid Rocket instance");
+
+    // when
+    let response = client.get("/api/customers/non-uuid").dispatch();
+
+    // then
+    assert_eq!(response.status(), Status::UnprocessableEntity);
+    assert_eq!(response.content_type(), Some(ContentType::JSON));
+    let expected_error = json!({"data": { "error": ["customer_id should be uuid"] } });
+    assert_eq!(response.into_json::<Value>(), Some(expected_error));
 }
 
 fn create_server() -> Rocket<Build> {

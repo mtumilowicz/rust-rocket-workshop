@@ -4,30 +4,18 @@ use thiserror::Error;
 use crate::domain::id::IdService;
 #[cfg(test)]
 use mockall::*;
+use nutype::nutype;
 use rocket::async_trait;
+use uuid::Uuid;
 
-#[derive(Eq, Hash, PartialEq, Clone, Debug)]
-pub struct CustomerId(String);
+#[nutype(
+    derive(Eq, Hash, PartialEq, Clone, Debug),
+)]
+pub struct CustomerId(Uuid);
 
 impl fmt::Display for CustomerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl CustomerId {
-    pub fn new(value: String) -> Self {
-        CustomerId(value)
-    }
-
-    pub fn raw(&self) -> String {
-        self.0.to_string()
-    }
-}
-
-impl From<String> for CustomerId {
-    fn from(value: String) -> Self {
-        CustomerId::new(value)
+        write!(f, "{}", self.clone().into_inner().to_string())
     }
 }
 
@@ -86,8 +74,8 @@ impl CustomerService {
         }
     }
     pub async fn create(&self, command: NewCustomerCommand) -> Result<Customer, CustomerError> {
-        let id = self.id_service.generate().await;
-        let customer = command.to_customer(CustomerId(id));
+        let id = self.id_service.generate_uuid().await;
+        let customer = command.to_customer(CustomerId::new(id));
         self.repository.create(customer).await
     }
 
@@ -136,7 +124,7 @@ mod tests {
     async fn test_get_nonexistent_customer() {
         let customer_service = crate_customer_service();
 
-        let customer_id = CustomerId("nonexistent_id".to_string());
+        let customer_id = CustomerId::new(Uuid::new_v4());
 
         let result = customer_service.get_by_id(&customer_id).await;
 

@@ -5,8 +5,9 @@ use rocket::{get, post};
 use rocket::response::status::{Created, Custom};
 use rocket::serde::json::Json;
 use serde_derive::{Deserialize, Serialize};
+use uuid::Uuid;
 use validator::{Validate};
-use crate::domain::customer::{Customer, CustomerError, CustomerService, NewCustomerCommand};
+use crate::domain::customer::{Customer, CustomerError, CustomerId, CustomerService, NewCustomerCommand};
 use crate::gateway::error::{ErrorApiOutput};
 
 #[derive(Deserialize, Validate)]
@@ -47,7 +48,7 @@ impl CustomerApiOutput {
 impl From<Customer> for CustomerApiOutput {
     fn from(customer: Customer) -> Self {
         CustomerApiOutput {
-            id: customer.id().raw(),
+            id: customer.id().to_string(),
             name: customer.name().to_string(),
             locked: customer.locked(),
         }
@@ -85,8 +86,16 @@ pub async fn create_customer(
 pub async fn get_customer(
     customer_id: String,
     service: &rocket::State<Arc<CustomerService>>,
-) -> Option<Json<CustomerApiOutput>> {
-    let customer_id = &customer_id.into();
-    service.get_by_id(customer_id).await
-        .map(|r| Json(r.into()))
+) -> Result<Option<Json<CustomerApiOutput>>, Custom<Json<ErrorApiOutput>>> {
+    match Uuid::parse_str(&customer_id) {
+        Ok(customer_id) => {
+            let customer_id = CustomerId::new(customer_id);
+            Ok(service.get_by_id(&customer_id).await
+                .map(|r| Json(r.into())))
+        }
+        Err(_) => {
+            let output = ErrorApiOutput::error(Cow::Borrowed("customer_id should be uuid"));
+            Err(Custom(Status::UnprocessableEntity, Json(output)))
+        }
+    }
 }

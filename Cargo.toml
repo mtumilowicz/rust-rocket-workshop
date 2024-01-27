@@ -6,17 +6,18 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uuid = { version = "1.6.1", features = ["v4"] }
+uuid = { version = "1.7.0", features = ["v4"] }
 config = "0.13.4"
 serde = { version = "1.0.193", features = ["derive"] }
 serde_derive = "1.0.193"
 tokio-stream = "0.1.14"
 thiserror= "1.0.56"
 validator = { version = "0.16.1", features = ["derive"] }
+nutype = "0.4.0"
 
 [dev-dependencies]
 mockall = "0.12.1"
 
 [dependencies.rocket]
 version = "0.5.0"
-features = ["json"]
+features = ["json", "uuid"]
