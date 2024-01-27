@@ -72,7 +72,7 @@ pub async fn create_customer(
     request: Json<NewCustomerApiInput>,
     customer_service: &rocket::State<Arc<CustomerService>>,
 ) -> Result<Created<Json<CustomerApiOutput>>, Custom<Json<ErrorApiOutput>>> {
-    request.validate().map_err(|err| ErrorApiOutput::from(err))?;
+    request.validate().map_err(|err| ErrorApiOutput::from("customer", err))?;
     let new_customer: NewCustomerCommand = request.into_inner().into();
     customer_service.create(new_customer).await
         .map(|customer| {

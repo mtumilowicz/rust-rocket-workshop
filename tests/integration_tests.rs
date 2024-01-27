@@ -76,9 +76,9 @@ fn test_create_validations() {
     assert_eq!(create_response.status(), Status::UnprocessableEntity);
     let expected_result: Value = json!(
         {
-            "name": [
-                "cannot be empty"
-            ]
+            "customer": {
+                "name": ["cannot be empty"]
+            }
         }
     );
     assert_eq!(create_response.into_json::<Value>(), Some(expected_result));
@@ -113,9 +113,9 @@ fn test_get_customer_non_uuid() {
     assert_eq!(response.content_type(), Some(ContentType::JSON));
     let expected_result = json!(
         {
-            "customer_id": [
-                "is not a correct uuid"
-            ]
+            "customer_id": {
+                "error": ["is not a correct uuid"]
+            }
         }
     );
     assert_eq!(response.into_json::<Value>(), Some(expected_result));
