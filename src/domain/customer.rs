@@ -114,14 +114,12 @@ pub trait CustomerRepository {
 mod tests {
     use rocket::async_test;
     use crate::infrastructure::customer_config::CustomerInMemoryRepository;
-    use crate::infrastructure::id_config::DeterministicRepository;
+    use crate::infrastructure::id_config::UuidRepository;
     use super::*;
 
     #[async_test]
     async fn test_create_and_get_customer() -> Result<(), Box<dyn std::error::Error>> {
-        let id_service = Arc::new(IdService::new(DeterministicRepository::new()));
-        let customer_repository = CustomerInMemoryRepository::new();
-        let customer_service = CustomerService::new(id_service, customer_repository);
+        let customer_service = crate_customer_service();
 
         let new_customer_command = NewCustomerCommand::new("John Doe".to_string(), false);
 
@@ -136,9 +134,7 @@ mod tests {
 
     #[async_test]
     async fn test_get_nonexistent_customer() {
-        let id_service = Arc::new(IdService::new(DeterministicRepository::new()));
-        let customer_repository = CustomerInMemoryRepository::new();
-        let customer_service = CustomerService::new(id_service, customer_repository);
+        let customer_service = crate_customer_service();
 
         let customer_id = CustomerId("nonexistent_id".to_string());
 
@@ -149,7 +145,7 @@ mod tests {
 
     #[async_test]
     async fn test_create_existing_customer() {
-        let id_service = Arc::new(IdService::new(DeterministicRepository::new()));
+        let id_service = Arc::new(IdService::new(UuidRepository));
 
         let mut mock_repository = MockCustomerRepository::new();
         mock_repository
@@ -164,6 +160,12 @@ mod tests {
         let result = customer_service.create(new_customer_command).await;
 
         assert!(matches!(result, Err(CustomerError::CustomerAlreadyExist(_))));
+    }
+
+    fn crate_customer_service() -> CustomerService {
+        let id_service = Arc::new(IdService::new(UuidRepository));
+        let customer_repository = CustomerInMemoryRepository::new();
+        CustomerService::new(id_service, customer_repository)
     }
 
 }
