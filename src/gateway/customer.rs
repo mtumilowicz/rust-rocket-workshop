@@ -60,7 +60,7 @@ impl From<CustomerError> for Custom<Json<ErrorApiOutput>> {
         match value {
             CustomerError::CustomerAlreadyExist(customer_id) => {
                 let message = format!("Customer with id = {customer_id} already exists");
-                let output = ErrorApiOutput::for_key("customer", Cow::Owned(message));
+                let output = ErrorApiOutput::error(Cow::Owned(message));
                 Custom(Status::BadRequest, Json(output))
             }
         }
@@ -72,7 +72,7 @@ pub async fn create_customer(
     request: Json<NewCustomerApiInput>,
     customer_service: &rocket::State<Arc<CustomerService>>,
 ) -> Result<Created<Json<CustomerApiOutput>>, Custom<Json<ErrorApiOutput>>> {
-    request.validate().map_err(|err| ErrorApiOutput::from("customer", err))?;
+    request.validate().map_err(|err| ErrorApiOutput::validation_errors(err))?;
     let new_customer: NewCustomerCommand = request.into_inner().into();
     customer_service.create(new_customer).await
         .map(|customer| {
@@ -96,7 +96,7 @@ fn parse_customer_id(customer_id: &str) -> Result<CustomerId, Custom<Json<ErrorA
     match Uuid::parse_str(customer_id) {
         Ok(uuid) => Ok(CustomerId::new(uuid)),
         Err(_) => {
-            let output = ErrorApiOutput::for_key("customer_id", Cow::Borrowed("is not a correct uuid"));
+            let output = ErrorApiOutput::error(Cow::Borrowed("customer_id is not a correct uuid"));
             Err(Custom(Status::UnprocessableEntity, Json(output)))
         }
     }

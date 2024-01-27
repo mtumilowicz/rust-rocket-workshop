@@ -7,12 +7,18 @@ use serde_derive::Serialize;
 use validator::{ValidationErrors};
 
 
-#[derive(Serialize)]
-pub struct ErrorApiOutput(HashMap<&'static str, HashMap<&'static str, Vec<Cow<'static, str>>>>);
 
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub enum ErrorApiOutput {
+    #[serde(rename = "error")]
+    Error(Cow<'static, str>),
+    #[serde(rename = "errors")]
+    Errors(HashMap<&'static str, Cow<'static, str>>)
+}
 impl ErrorApiOutput {
 
-    pub fn from(key: &'static str, errors: ValidationErrors) -> ErrorApiOutput {
+    pub fn validation_errors(errors: ValidationErrors) -> ErrorApiOutput {
         let mut error_map = HashMap::new();
 
         for (field, validation_errors) in errors.field_errors() {
@@ -21,17 +27,16 @@ impl ErrorApiOutput {
                 .flat_map(|error| error.message.clone())
                 .collect();
 
-            error_map.insert(field, error_messages);
+            if let Some(error_message) = error_messages.first() {
+                error_map.insert(field, error_message.to_owned());
+            }
         }
 
-        ErrorApiOutput(HashMap::from([(key, error_map)]))
+        ErrorApiOutput::Errors(error_map)
     }
 
-    pub fn for_key(key: &'static str, message: Cow<'static, str>) -> ErrorApiOutput {
-        let mut data = HashMap::new();
-        data.insert("error", vec!(message));
-
-        ErrorApiOutput(HashMap::from([(key, data)]))
+    pub fn error(message: Cow<'static, str>) -> ErrorApiOutput {
+        ErrorApiOutput::Error(message)
     }
 }
 
