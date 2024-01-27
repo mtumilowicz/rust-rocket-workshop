@@ -14,7 +14,7 @@ pub enum ErrorApiOutput {
     #[serde(rename = "error")]
     Error(Cow<'static, str>),
     #[serde(rename = "errors")]
-    Errors(HashMap<&'static str, Cow<'static, str>>)
+    Errors(HashMap<&'static str, Vec<Cow<'static, str>>>)
 }
 impl ErrorApiOutput {
 
@@ -22,14 +22,12 @@ impl ErrorApiOutput {
         let mut error_map = HashMap::new();
 
         for (field, validation_errors) in errors.field_errors() {
-            let error_messages: Vec<_> = validation_errors
+            let error_messages = validation_errors
                 .iter()
                 .flat_map(|error| error.message.clone())
                 .collect();
 
-            if let Some(error_message) = error_messages.first() {
-                error_map.insert(field, error_message.to_owned());
-            }
+            error_map.insert(field, error_messages);
         }
 
         ErrorApiOutput::Errors(error_map)

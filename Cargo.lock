@@ -1320,8 +1320,10 @@ name = "rust-rocket-workshop"
 version = "0.1.0"
 dependencies = [
  "config",
+ "lazy_static",
  "mockall",
  "nutype",
+ "regex",
  "rocket",
  "serde",
  "serde_derive",

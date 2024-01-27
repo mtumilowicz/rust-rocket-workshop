@@ -20,7 +20,7 @@ fn test_create_and_get_customer() {
     // and
     let new_customer_input = r#"
         {
-            "name": "John Doe"
+            "name": "John"
         }
     "#;
 
@@ -45,7 +45,7 @@ fn test_create_and_get_customer() {
     let expected_result: Value = json!(
         {
             "id": customer_id,
-            "name": "John Doe",
+            "name": "John",
             "locked": false
         }
     );
@@ -54,7 +54,7 @@ fn test_create_and_get_customer() {
 }
 
 #[test]
-fn test_create_validations() {
+fn test_create_validation_empty_name() {
     // given
     let rocket = create_server();
     let client = Client::tracked(rocket).expect("valid rocket instance");
@@ -77,7 +77,38 @@ fn test_create_validations() {
     let expected_result: Value = json!(
         {
             "errors": {
-                "name": "cannot be empty"
+                "name": ["cannot be empty", "does not contain only letters"]
+            }
+        }
+    );
+    assert_eq!(create_response.into_json::<Value>(), Some(expected_result));
+}
+
+#[test]
+fn test_create_validation_number_name() {
+    // given
+    let rocket = create_server();
+    let client = Client::tracked(rocket).expect("valid rocket instance");
+
+    // and
+    let new_customer_input = r#"
+        {
+            "name": "111"
+        }
+    "#;
+
+    // when
+    let create_response = client.post("/api/customers")
+        .header(ContentType::JSON)
+        .body(new_customer_input)
+        .dispatch();
+
+    // then
+    assert_eq!(create_response.status(), Status::UnprocessableEntity);
+    let expected_result: Value = json!(
+        {
+            "errors": {
+                "name": ["does not contain only letters"]
             }
         }
     );

@@ -9,11 +9,13 @@ use uuid::Uuid;
 use validator::{Validate};
 use crate::domain::customer::{Customer, CustomerError, CustomerId, CustomerService, NewCustomerCommand};
 use crate::gateway::error::{ErrorApiOutput};
+use crate::gateway::regex::ENGLISH_ALPHABET;
 
 #[derive(Deserialize, Validate)]
 #[serde(crate = "rocket::serde")]
 pub struct NewCustomerApiInput {
     #[validate(length(min = 1, message = "cannot be empty"))]
+    #[validate(regex(path = "ENGLISH_ALPHABET", message = "does not contain only letters"))]
     name: String,
 }
 
