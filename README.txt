@@ -93,6 +93,7 @@
     * https://blog.logrocket.com/using-cow-rust-efficient-memory-utilization/
     * https://rahul-thakoor.github.io/rust-raw-string-literals/
     * https://www.shakacode.com/blog/thiserror-anyhow-or-how-i-handle-errors-in-rust-apps/
+    * https://stackoverflow.com/questions/69518853/not-using-async-in-rocket-0-5
 
 ## rust
 * statically typed language
@@ -1472,6 +1473,14 @@
 ## rocket
 * is a web framework for Rust
     * provides routing, pre-processing of requests, and post-processing of responses
+* fully asynchronous, powered by tokio
+    * every request is handled by an asynchronous task which internally calls one or more request handlers
+    * tasks are multiplexed on a configurable number of worker threads
+        * runtime can switch between tasks in a single worker thread iff (if and only if) an `await` point is reached
+            * context switching is cooperative (switches occur when a task explicitly yields control to the scheduler)
+                * not preemptive (switches are done independently of the tasks' cooperation)
+            * if an `await` point is not reached, no task switching can occur
+                * important that `await` points occur periodically
 * `#[launch]`
     * generates a main function that launches a returned `Rocket<Build>`
     * automatically initializes an `async` runtime and launches the function’s returned instance
@@ -1482,19 +1491,47 @@
             rocket::build() // compiled to rocket().launch().await;
         }
         ```
-* fully asynchronous, powered by tokio
-    * every request is handled by an asynchronous task which internally calls one or more request handlers
-    * tasks are multiplexed on a configurable number of worker threads
-        * runtime can switch between tasks in a single worker thread iff (if and only if) an `await` point is reached
-            * context switching is cooperative (switches occur when a task explicitly yields control to the scheduler)
-                * not preemptive (switches are done independently of the tasks' cooperation)
-            * if an `await` point is not reached, no task switching can occur
-                * important that `await` points occur periodically
-* blocking operation => use `rocket::tokio::task::spawn_blocking(FnOnce)`
-    * execute the computation in its own thread
-    * example: long computations
-    * number of `max_blocking_threads` also affects how your `spawn_blocking` tasks execute
-        * default is 512, so you're unlikely to hit it
+* endpoint
+    * example
+        ```
+        #[get("/customers/<id>")] // typed validation for id is implemented via the FromParam trait
+        async fn get_customer(id: String) -> Option<String> { ... } // if None - an error of 404 - Not Found is returned to the client
+
+        #[post("/hello", data = "<data>")] // data = "<param>", where param is an argument in the handler means that a handler expects body data
+        async fn create_customer(data: Json<CustomerApiInput>) -> Result<Json<CustomerApiOutput>, Custom<Json<ErrorApiOutput>>>  { ... }
+
+        rocket::build().mount(base_path, routes![get_customer, create_customer, ...]); // route needs to be mounted
+        ```
+    * when a non-async handler is run, it will be as if Rocket used spawn_blocking()
+    * `Custom<R>(pub Status, pub R)` - creates a response with the given status code and underlying responder
+        * example
+            ```
+            let response: Custom<String> = status::Custom(Status::BadRequest, "error");
+            ```
+* serialization
+    * Rocket re-exports serde's `Serialize` and `Deserialize` traits and derive macros from `rocket::serde`
+    * using the re-exported derive macros requires annotating structures with `#[serde(crate = "rocket::serde")]`
+        * due to Rust's limited support for derive macro re-exports
+* state
+    * managed on a per-type basis
+        * at most one value of a given type
+    * handlers can concurrently access managed state
+        * add `&State<T>` type to any request handler, where `T` is the type of the value passed into manage
+            * example
+                ```
+                #[get("/customers/<customer_id>")]
+                pub async fn get_customer(
+                    customer_id: String,
+                    service: &rocket::State<Arc<CustomerService>>,
+                ) -> Option<Json<CustomerApiOutput>>
+                ```
+        * Rocket automatically parallelizes your application
+        * values you store in managed state implement `Send + Sync`
+    * Rocket instance needs to be started with initial value of the state
+        * use `manage` to add state to Rocket instance
+            * example: `rocket::build().manage(state)`
+        * if `&State<T>` for a `T` is not managed => Rocket will refuse to start application
+            * example: `error: launching with unmanaged T state`
 * configuration: `Rocket.toml`
     * profiles
         * `debug` and `release`
@@ -1504,47 +1541,57 @@
             * defining most configuration
         * `global`
             * profile with overrides for all profiles
-    * Based on Figment
-        * Figment is a library for declaring and combining configuration sources and extracting typed values from the combined sources
-    * The `workers` parameter sets the number of threads used for parallel task execution
-    * The max_blocking parameter sets an upper limit on the number of threads the underlying async runtime will spawn to execute potentially blocking, synchronous tasks via spawn_blocking or equivalent.
-        * the default value of 512 should not be changed unless physical or virtual resources are scarce
-* `uri!()` macro
-    * uri!("http://localhost:8000")
-    * uri!("https://rocket.rs/", person("Bob", Some(28)), "#woo")
-* #[get("/world")]
-    * rocket::build().mount(base_path, routes![route1, route2, ...]); // route needs to be mounted
-* #[async_trait]
-* #[get("/hello/<name>")]
-  fn hello(name: &str) -> String {
-      format!("Hello, {}!", name)
-  }
-* To indicate that a handler expects body data, annotate it with data = "<param>", where param is an argument in the handler
-* For convenience, Rocket re-exports serde's Serialize and Deserialize traits and derive macros from rocket::serde. However, due to Rust's limited support for derive macro re-exports, using the re-exported derive macros requires annotating structures with #[serde(crate = "rocket::serde")]
-* async fn files(file: PathBuf) -> Option<NamedFile> {
-    * Option is a wrapping responder: an Option<T> can only be returned when T implements Respond
-    *  If the Option is Some, the wrapped responder is used to respond to the client. Otherwise, an error of 404 - Not Found is returned to the client.
-* state is managed on a per-type basis: Rocket will manage at most one value of a given type
-    * Call manage on the Rocket instance corresponding to your application with the initial value of the state
-    * Add a &State<T> type to any request handler, where T is the type of the value passed into manage
-    * handlers can concurrently access managed state
-        * Rocket automatically parallelizes your application
-        * values you store in managed state implement Send + Sync
-    * if you request a &State<T> for a T that is not managed, Rocket will refuse to start your application
-    * Because State is itself a request guard, managed state can be retrieved from another request guard's implementation using either Request::guard() or Rocket::state()
-        * impl<'r> FromRequest<'r> for Item<'r> {
+    * to override entries use env variable: `ROCKET_{PARAM}`
+        * example: `ROCKET_PORT=9092`
+    * based on Figment
+        * figment is a library for declaring and combining configuration sources and extracting typed values from the combined sources
+    * useful parameters
+        * `workers` - sets the number of threads used for parallel task execution
+        * `max_blocking` - sets an upper limit of threads to execute potentially blocking, synchronous tasks
+            * `rocket::tokio::task::spawn_blocking(FnOnce)`
+                * execute the computation in its own thread
+                * example: long computations
 * testing
-    1. Construct a Client using the Rocket instance.
-    let client = Client::tracked(rocket).unwrap();
-    1. Construct requests using the Client instance.
-    let req = client.get("/");
-    1. Dispatch the request to retrieve the response.
-    let response = req.dispatch();
+    * example
+        ```
+        let client = Client::tracked(rocket).unwrap(); // construct a Client using the Rocket instance
+        let req = client.get("/"); // Construct requests using the Client instance
+        let response = req.dispatch(); // Dispatch the request to retrieve the response
+        ```
     * blocking testing API is easier to use and should be preferred
-        * rocket::local::asynchronous
-* Typed validation for dynamic parameters like id is implemented via the FromParam trait.
-* to override entries use env variable: ROCKET_{PARAM}
-    * example: `ROCKET_PORT=9092`
+        * async testing API: `rocket::local::asynchronous`
+* useful macros
+    * `uri!()` creates a type-safe, URL safe URI
+        * example
+            * `uri!("http://localhost:8000")`
+            * `uri!("/api", person: name = "Mike", age = 28);` ~ `"api/person/Mike?age=28"`
+            * from endpoint
+                ```
+                #[get("/person/<name>?<age>")]
+                fn person(name: &str, age: Option<u8>) { }
+
+                uri!("api/", person("Bob", Some(28))); // api/person/Bob?age=28
+                ```
+    * `#[async_trait]`
+        * support for `async fn` in trait impls and declarations
+
+## validator
+* simplify struct validation
+* example
+    ```
+    #[derive(Debug, Validate, Deserialize)]
+    struct PersonApiInput {
+        #[validate(custom = "validate_name")]
+        name: String
+    }
+
+    fn validate_name(name: &str) -> Result<(), ValidationError> { ... }
+
+    if let Err(_) = person_api_input.validate() {
+      return "invalid input";
+    };
+    ```
+
 
 ## nutype
 * allows adding extra constraints like sanitization and validation to the regular newtype pattern
@@ -1576,6 +1623,6 @@
 
 ## mockall
 * provides tools to create mock versions of almost any trait or struct
-* `#[automock]` can mock most traits, or structs that only have a single impl block
-* instantiate the mock struct with its `new` or `default` method
-* record expectations
+    1. annotate with `#[automock]`
+    1. instantiate the mock struct with its `new` or `default` method
+    1. record expectations
