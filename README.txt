@@ -1591,7 +1591,23 @@
       return "invalid input";
     };
     ```
-
+## lazy-static
+* enables to have statics initialized at runtime
+* in most of the cases can be replaced with `std::sync::OnceLock`
+    * example approach
+        ```
+        fn hashmap() -> &'static HashMap<u32, &'static str> {
+            static HASHMAP: OnceLock<HashMap<u32, &str>> = OnceLock::new();
+            HASHMAP.get_or_init(|| {
+                let mut m = HashMap::new();
+                m.insert(0, "foo");
+                m.insert(1, "bar");
+                m.insert(2, "baz");
+                m
+            })
+        }
+        ```
+    * apart from cases that u need value not function
 
 ## nutype
 * allows adding extra constraints like sanitization and validation to the regular newtype pattern
