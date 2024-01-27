@@ -94,6 +94,7 @@
     * https://rahul-thakoor.github.io/rust-raw-string-literals/
     * https://www.shakacode.com/blog/thiserror-anyhow-or-how-i-handle-errors-in-rust-apps/
     * https://stackoverflow.com/questions/69518853/not-using-async-in-rocket-0-5
+    * https://github.com/rust-lang-nursery/lazy-static.rs
 
 ## rust
 * statically typed language
