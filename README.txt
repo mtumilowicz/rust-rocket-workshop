@@ -101,6 +101,43 @@
 
 ## preface
 * goals of this workshop
+    * understanding basics of rust
+        * memory management
+            * stack vs heap allocation
+            * multithreading
+                * safety: `Send`, `Sync`
+                * machinery: `async/await`, runtime providers
+        * borrow checker
+            * reference types: immutable and mutable
+            * move vs borrow
+            * lifetimes
+        * standard structures
+            * struct, enum
+            * trait
+                * including most used: `Clone`, `Copy`, `Debug`, `Display`, `Deref`,
+                `Drop`, `Eq`, `PartialEq`, `Hash`, `From`, `Into`
+            * Box, Cow, Rc, Arc
+            * closure
+            * String vs &str
+            * collections: array, slice, vector, hashmap
+        * useful syntax
+            * operators: `.`, `?`
+            * pattern matching
+        * error handling
+        * testing & mocking (mockall)
+    * introduction to rocket
+        * configuration
+        * defining endpoints
+        * dependency injection (state management)
+    * rust ecosystem overview
+        * cargo
+        * crates
+            * validator
+            * lazy-static
+            * nutype
+            * thiserror
+
+
 * workshop task: implement endpoint for deleting customer
 
 ## rust
@@ -1599,6 +1636,7 @@
       return "invalid input";
     };
     ```
+
 ## lazy-static
 * enables to have statics initialized at runtime
 * in most of the cases can be replaced with `std::sync::OnceLock`
