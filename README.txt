@@ -99,6 +99,10 @@
     * https://stackoverflow.com/questions/69518853/not-using-async-in-rocket-0-5
     * https://github.com/rust-lang-nursery/lazy-static.rs
 
+## preface
+* goals of this workshop
+* workshop task: implement endpoint for deleting customer
+
 ## rust
 * statically typed language
 * makes memory safety guarantees without needing a garbage collector
