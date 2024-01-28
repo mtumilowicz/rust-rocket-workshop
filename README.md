@@ -136,8 +136,6 @@
             * lazy-static
             * nutype
             * thiserror
-
-
 * workshop task: implement endpoint for deleting customer
 
 ## rust
