@@ -1556,6 +1556,7 @@
     * using the re-exported derive macros requires annotating structures with `#[serde(crate = "rocket::serde")]`
         * due to Rust's limited support for derive macro re-exports
 * state
+    * used for dependency injection
     * managed on a per-type basis
         * at most one value of a given type
     * handlers can concurrently access managed state
