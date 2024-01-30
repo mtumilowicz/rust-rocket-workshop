@@ -98,6 +98,7 @@
     * https://www.shakacode.com/blog/thiserror-anyhow-or-how-i-handle-errors-in-rust-apps/
     * https://stackoverflow.com/questions/69518853/not-using-async-in-rocket-0-5
     * https://github.com/rust-lang-nursery/lazy-static.rs
+    * https://github.com/rwf2/Rocket/issues/2714
 
 ## preface
 * goals of this workshop
@@ -1536,16 +1537,28 @@
         ```
 * endpoint
     * example
+    * get
         ```
-        #[get("/customers/<id>")] // typed validation for id is implemented via the FromParam trait
+        #[get("/customers/<id>")]
         async fn get_customer(id: String) -> Option<String> { ... } // if None - an error of 404 - Not Found is returned to the client
-
+        ```
+        * typed validation for param is implemented via the `FromParam` trait
+            * return type of method `FromParam::from_param(param: &'a str) -> Result<Self, Self::Error>;` corresponds to param input of endpoint
+                ```
+                async fn get_customer(id: Result<CustomerId, String>) -> ... // corresponds to FromParam::from_param -> Result<CustomerId, String>
+                ```
+    * post
+        ```
         #[post("/hello", data = "<data>")] // data = "<param>", where param is an argument in the handler means that a handler expects body data
-        async fn create_customer(data: Json<CustomerApiInput>) -> Result<Json<CustomerApiOutput>, Custom<Json<ErrorApiOutput>>>  { ... }
-
+        async fn create_customer(
+            data: Json<CustomerApiInput> // data needs to implement `FromData<'_>`, Json<_> implements it
+        ) -> Result<Json<CustomerApiOutput>, Custom<Json<ErrorApiOutput>>>  { ... }
+        ```
+    * adding routes
+        ```
         rocket::build().mount(base_path, routes![get_customer, create_customer, ...]); // route needs to be mounted
         ```
-    * when a non-async handler is run, it will be as if Rocket used spawn_blocking()
+    * when a non-async handler is run, it will be as if Rocket used `spawn_blocking()`
     * `Custom<R>(pub Status, pub R)` - creates a response with the given status code and underlying responder
         * example
             ```
