@@ -36,8 +36,12 @@ impl ErrorApiOutput {
         ErrorApiOutput::Errors(error_map)
     }
 
-    pub fn error(message: Cow<'static, str>) -> ErrorApiOutput {
-        ErrorApiOutput::Error(message)
+    pub fn error_str(message: &'static str) -> Self {
+        ErrorApiOutput::Error(Cow::Borrowed(message))
+    }
+
+    pub fn error_string(message: String) -> Self {
+        ErrorApiOutput::Error(Cow::Owned(message))
     }
 }
 

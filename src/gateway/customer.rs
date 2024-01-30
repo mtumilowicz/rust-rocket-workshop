@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::sync::Arc;
 use rocket::http::Status;
 use rocket::{get, post};
@@ -44,7 +43,7 @@ impl<'r> FromParam<'r> for CustomerId {
             Ok(uuid) => Ok(CustomerId::new(uuid)),
             Err(_) => {
                 let message = "customer_id is not a correct uuid";
-                Err(Custom(Status::UnprocessableEntity, Json(ErrorApiOutput::error(Cow::Borrowed(message)))))
+                Err(Custom(Status::UnprocessableEntity, Json(ErrorApiOutput::error_str(message))))
             },
         }
     }
@@ -79,7 +78,7 @@ impl From<CustomerError> for Custom<Json<ErrorApiOutput>> {
         match value {
             CustomerError::CustomerAlreadyExist(customer_id) => {
                 let message = format!("Customer with id = {customer_id} already exists");
-                let output = ErrorApiOutput::error(Cow::Owned(message));
+                let output = ErrorApiOutput::error_string(message);
                 Custom(Status::BadRequest, Json(output))
             }
         }
