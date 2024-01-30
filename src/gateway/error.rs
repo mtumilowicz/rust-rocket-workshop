@@ -4,16 +4,19 @@ use rocket::http::Status;
 use rocket::response::status::Custom;
 use rocket::serde::json::Json;
 use serde_derive::Serialize;
+use thiserror::Error;
 use validator::{ValidationErrors};
 
 
 
-#[derive(Serialize)]
+#[derive(Serialize, Error, Debug)]
 #[serde(crate = "rocket::serde")]
 pub enum ErrorApiOutput {
     #[serde(rename = "error")]
+    #[error("error: {0}")]
     Error(Cow<'static, str>),
     #[serde(rename = "errors")]
+    #[error("errors: {0:?}")]
     Errors(HashMap<&'static str, Vec<Cow<'static, str>>>)
 }
 impl ErrorApiOutput {

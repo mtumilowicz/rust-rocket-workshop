@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::sync::Arc;
 use rocket::http::Status;
 use rocket::{get, post};
+use rocket::request::FromParam;
 use rocket::response::status::{Created, Custom};
 use rocket::serde::json::Json;
 use serde_derive::{Deserialize, Serialize};
@@ -10,6 +11,8 @@ use validator::{Validate};
 use crate::domain::customer::{Customer, CustomerError, CustomerId, CustomerService, NewCustomerCommand};
 use crate::gateway::error::{ErrorApiOutput};
 use crate::gateway::regex::ENGLISH_ALPHABET;
+
+type ApiIO<T> = Result<T, Custom<Json<ErrorApiOutput>>>;
 
 #[derive(Deserialize, Validate)]
 #[serde(crate = "rocket::serde")]
@@ -31,6 +34,20 @@ pub struct CustomerApiOutput {
     id: String,
     name: String,
     locked: bool,
+}
+
+impl<'r> FromParam<'r> for CustomerId {
+    type Error = Custom<Json<ErrorApiOutput>>;
+
+    fn from_param(param: &'r str) -> Result<Self, Self::Error> {
+        match Uuid::parse_str(param) {
+            Ok(uuid) => Ok(CustomerId::new(uuid)),
+            Err(_) => {
+                let message = "customer_id is not a correct uuid";
+                Err(Custom(Status::UnprocessableEntity, Json(ErrorApiOutput::error(Cow::Borrowed(message)))))
+            },
+        }
+    }
 }
 
 impl CustomerApiOutput {
@@ -73,7 +90,7 @@ impl From<CustomerError> for Custom<Json<ErrorApiOutput>> {
 pub async fn create_customer(
     request: Json<NewCustomerApiInput>,
     customer_service: &rocket::State<Arc<CustomerService>>,
-) -> Result<Created<Json<CustomerApiOutput>>, Custom<Json<ErrorApiOutput>>> {
+) -> ApiIO<Created<Json<CustomerApiOutput>>> {
     request.validate().map_err(|err| ErrorApiOutput::validation_errors(err))?;
     let new_customer: NewCustomerCommand = request.into_inner().into();
     customer_service.create(new_customer).await
@@ -86,20 +103,10 @@ pub async fn create_customer(
 
 #[get("/customers/<customer_id>")]
 pub async fn get_customer(
-    customer_id: String,
+    customer_id: ApiIO<CustomerId>,
     service: &rocket::State<Arc<CustomerService>>,
 ) -> Result<Option<Json<CustomerApiOutput>>, Custom<Json<ErrorApiOutput>>> {
-    let customer_id = parse_customer_id(&customer_id)?;
+    let customer_id = customer_id?;
     Ok(service.get_by_id(&customer_id).await
         .map(|r| Json(r.into())))
-}
-
-fn parse_customer_id(customer_id: &str) -> Result<CustomerId, Custom<Json<ErrorApiOutput>>> {
-    match Uuid::parse_str(customer_id) {
-        Ok(uuid) => Ok(CustomerId::new(uuid)),
-        Err(_) => {
-            let output = ErrorApiOutput::error(Cow::Borrowed("customer_id is not a correct uuid"));
-            Err(Custom(Status::UnprocessableEntity, Json(output)))
-        }
-    }
 }
