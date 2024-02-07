@@ -238,7 +238,7 @@
                 ```
                 hash_map.insert("one", 1) // desugared into (&mut hashmap_wrapper).insert("one", 1);
                 ```
-*` Box<T>`
+* `Box<T>`
     * simplest way to allocate a value in the heap
     * `Box::new(v)` allocates some heap space, moves the value v into it, and returns a `Box` pointing to the heap space
     * if goes out of scope, the memory is freed immediately
