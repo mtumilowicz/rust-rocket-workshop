@@ -117,9 +117,9 @@
             * trait
                 * including most used: `Clone`, `Copy`, `Debug`, `Display`, `Deref`,
                 `Drop`, `Eq`, `PartialEq`, `Hash`, `From`, `Into`
-            * Box, Cow, Rc, Arc
+            * `Box`, `Cow`, `Rc`, `Arc`
             * closure
-            * String vs &str
+            * String vs `&str`
             * collections: array, slice, vector, hashmap
         * useful syntax
             * operators: `.`, `?`
