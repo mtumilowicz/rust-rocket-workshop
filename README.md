@@ -297,13 +297,13 @@
     * in short: uses to ensure all borrows are valid
 * is a proof that no reference can possibly outlive the value it points to
     * example: value cannot be dropped when its referents are still alive
-            ```
-            fn create_struct<'a>() -> &'a str {
-                let tmp = String::from("Hello, Rust!"); // data owned by the current function
+      ```
+      fn create_struct<'a>() -> &'a str {
+         let tmp = String::from("Hello, Rust!"); // data owned by the current function
 
-                &tmp // compilation error: cannot return reference to temporary value
-            } // tmp is dropped here
-            ```
+         &tmp // compilation error: cannot return reference to temporary value
+      } // tmp is dropped here
+      ```
     * example: reference stored in some data structure must enclose that of the data structure
         ```
         struct Path<'a> { // specifies that the reference must live at least as long as the instance of the struct
