@@ -44,7 +44,7 @@ impl<'r> FromParam<'r> for CustomerId {
     fn from_param(param: &'r str) -> Result<Self, Self::Error> {
         match Uuid::parse_str(param) {
             Ok(uuid) => Ok(CustomerId::new(uuid)),
-            Err(_) => Err(CannotProcessEntity::from_str("customer_id", "not a correct uuid"))
+            Err(_) => Err(CannotProcessEntity::from_str("customerId", "not a correct uuid"))
         }
     }
 }

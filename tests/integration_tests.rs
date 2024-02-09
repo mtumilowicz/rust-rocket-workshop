@@ -145,7 +145,7 @@ fn test_get_customer_non_uuid() {
     let expected_result = json!(
         {
             "errors": {
-                "customer_id": ["not a correct uuid"]
+                "customerId": ["not a correct uuid"]
             }
         }
     );

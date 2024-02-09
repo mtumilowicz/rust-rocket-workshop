@@ -62,34 +62,26 @@ impl From<ErrorApiOutput> for Custom<Json<ErrorApiOutput>> {
 }
 
 #[derive(Serialize, JsonSchema, Error, Debug)]
-#[error("error: {values}")]
-pub struct CannotProcessEntity { key: &'static str, values: Cow<'static, str> }
+#[error("error: {error}")]
+pub struct CannotProcessEntity { entity: &'static str, error: Cow<'static, str> }
 impl CannotProcessEntity {
 
-    pub fn message_str(value: &'static str) -> Self {
-        Self::from_str("message", value)
-    }
-
-    pub fn message_string(value: String) -> Self {
-        Self::from_string("message", value)
-    }
-
-    pub fn from_str(key: &'static str, value: &'static str) -> Self {
+    pub fn from_str(entity: &'static str, error: &'static str) -> Self {
         CannotProcessEntity {
-            key: key,
-            values: Cow::Borrowed(value) }
+            entity,
+            error: Cow::Borrowed(error) }
     }
 
-    pub fn from_string(key: &'static str, value: String) -> Self {
+    pub fn from_string(entity: &'static str, error: String) -> Self {
         CannotProcessEntity {
-            key: key,
-            values: Cow::Owned(value)
+            entity,
+            error: Cow::Owned(error)
         }
     }
 }
 
 impl From<CannotProcessEntity> for ErrorApiOutput {
     fn from(value: CannotProcessEntity) -> Self {
-        ErrorApiOutput::unprocessable(value.key, value.values)
+        ErrorApiOutput::unprocessable(value.entity, value.error)
     }
 }
