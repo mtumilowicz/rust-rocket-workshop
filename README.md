@@ -99,6 +99,8 @@
     * https://stackoverflow.com/questions/69518853/not-using-async-in-rocket-0-5
     * https://github.com/rust-lang-nursery/lazy-static.rs
     * https://github.com/rwf2/Rocket/issues/2714
+    * https://github.com/GREsau/okapi
+    * https://github.com/GREsau/schemars
 
 ## preface
 * goals of this workshop
@@ -1631,6 +1633,52 @@
                 ```
     * `#[async_trait]`
         * support for `async fn` in trait impls and declarations
+
+## okapi
+* OpenAPI document generation for Rust/Rocket projects
+* crate does not contain any code for the creation of OpenAPI
+    * only the structure and code to merge two OpenAPI
+    * can be reused to create OpenAPI support in other web framework
+* rocket-okapi
+    * contains all the code for generating the OpenAPI file and serve it once created
+    * generate documentation while setting up the server
+        * never has outdated documentation
+    * usually executed using macro's like: `openapi_get_routes![...]`
+* `JsonSchema` implementation is handled by `Schemars`
+    * easiest way to generate a JSON schema for your types is to `#[derive(JsonSchema)]`
+    * library is compatible with Serde
+        * generated schema should match how serde_json would serialize/deserialize to/from JSON
+            * example: `#[serde(rename_all = "camelCase")]`
+    * crate provides with the schemas for all the different structures and enums
+        * objects for which the JsonSchema trait is not implemented => enable a feature flag in `Schemars`
+            * example: uuid
+                ```
+                schemars = { version = "0.8", features = [ "uuid1" ] }
+                ```
+    * Okapi does not implement any schemas directly, this is all handled by `Schemars`
+* uses a combination of Rust Doc comments and programming logic
+    * example: endpoint
+        ```
+        /// # Get all users
+        ///
+        /// Returns all users in the system.
+        #[openapi(tag = "Users")]
+        #[get("/user")]
+        fn get_all_users() -> ... {
+        ```
+    * example: dto
+        ```
+        #[derive(Serialize, Deserialize, JsonSchema)]
+        #[serde(rename_all = "camelCase")]
+        struct User {
+            /// A unique user identifier.
+            user_id: u64,
+            /// The current username of the user.
+            username: String,
+            #[schemars(example = "example_email")]
+            email: Option<String>,
+        }
+        ```
 
 ## validator
 * simplify struct validation
