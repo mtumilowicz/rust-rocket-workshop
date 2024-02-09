@@ -3,22 +3,23 @@ use std::collections::HashMap;
 use rocket::http::Status;
 use rocket::response::status::Custom;
 use rocket::serde::json::Json;
+use rocket_okapi::okapi::schemars;
+use rocket_okapi::okapi::schemars::JsonSchema;
 use serde_derive::Serialize;
 use thiserror::Error;
 use validator::{ValidationErrors};
 
-
-
-#[derive(Serialize, Error, Debug)]
+#[derive(Serialize, JsonSchema, Error, Debug)]
 #[serde(crate = "rocket::serde")]
 pub enum ErrorApiOutput {
+    #[serde(rename = "errors")]
+    #[error("errors: {0:?}")]
+    Unprocessable(HashMap<&'static str, Vec<Cow<'static, str>>>),
     #[serde(rename = "error")]
     #[error("error: {0}")]
     Error(Cow<'static, str>),
-    #[serde(rename = "errors")]
-    #[error("errors: {0:?}")]
-    Errors(HashMap<&'static str, Vec<Cow<'static, str>>>)
 }
+
 impl ErrorApiOutput {
 
     pub fn validation_errors(errors: ValidationErrors) -> ErrorApiOutput {
@@ -33,7 +34,7 @@ impl ErrorApiOutput {
             error_map.insert(field, error_messages);
         }
 
-        ErrorApiOutput::Errors(error_map)
+        ErrorApiOutput::Unprocessable(error_map)
     }
 
     pub fn error_str(message: &'static str) -> Self {
@@ -47,6 +48,19 @@ impl ErrorApiOutput {
 
 impl From<ErrorApiOutput> for Custom<Json<ErrorApiOutput>> {
     fn from(value: ErrorApiOutput) -> Self {
-        Custom(Status::UnprocessableEntity, Json(value))
+        match &value {
+            ErrorApiOutput::Unprocessable(_) => Custom(Status::UnprocessableEntity, Json(value)),
+            ErrorApiOutput::Error(_) => Custom(Status::BadRequest, Json(value)),
+        }
+    }
+}
+
+#[derive(Serialize, JsonSchema, Error, Debug)]
+#[error("error: {0}")]
+pub struct CannotProcessEntity(pub String);
+
+impl From<CannotProcessEntity> for Custom<Json<ErrorApiOutput>> {
+    fn from(value: CannotProcessEntity) -> Self {
+        Custom(Status::UnprocessableEntity, Json(ErrorApiOutput::error_string(value.0)))
     }
 }

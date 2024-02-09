@@ -2,16 +2,38 @@ use std::fmt;
 use std::sync::Arc;
 use thiserror::Error;
 use crate::domain::id::IdService;
-#[cfg(test)]
-use mockall::*;
+use rocket_okapi::okapi::schemars;
+use rocket_okapi::okapi::schemars::JsonSchema;
 use nutype::nutype;
 use rocket::async_trait;
 use uuid::Uuid;
+#[cfg(test)]
+use mockall::*;
 
 #[nutype(
     derive(Eq, Hash, PartialEq, Clone, Debug),
 )]
 pub struct CustomerId(Uuid);
+
+// deriving JsonSchema for nutype with Uuid not yet available
+// that's why we implement it
+// can be replaced with CustomerId(String) - deriving works
+impl JsonSchema for CustomerId {
+    fn schema_name() -> String {
+        "CustomerId".to_string()
+    }
+
+    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+        let schema = gen.subschema_for::<Uuid>();
+        schemars::schema::SchemaObject {
+            instance_type: Some(schemars::schema::InstanceType::String.into()),
+            format: Some("uuid".to_string()),
+            ..schema.into_object()
+        }
+            .into()
+    }
+}
+
 
 impl fmt::Display for CustomerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

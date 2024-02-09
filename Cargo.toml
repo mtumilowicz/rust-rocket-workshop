@@ -16,6 +16,8 @@ validator = { version = "0.16.1", features = ["derive"] }
 nutype = "0.4.0"
 lazy_static = "1.4.0"
 regex = "1.10.2"
+schemars = { version = "0.8", features = [ "uuid1" ] }
+rocket_okapi = { version = "0.8.0", features = [ "swagger", "rapidoc", "uuid" ] }
 
 [dev-dependencies]
 mockall = "0.12.1"
