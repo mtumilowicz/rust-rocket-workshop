@@ -144,7 +144,9 @@ fn test_get_customer_non_uuid() {
     assert_eq!(response.content_type(), Some(ContentType::JSON));
     let expected_result = json!(
         {
-            "error": "customer_id is not a correct uuid"
+            "errors": {
+                "customer_id": ["not a correct uuid"]
+            }
         }
     );
     assert_eq!(response.into_json::<Value>(), Some(expected_result));

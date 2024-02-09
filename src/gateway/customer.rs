@@ -44,7 +44,7 @@ impl<'r> FromParam<'r> for CustomerId {
     fn from_param(param: &'r str) -> Result<Self, Self::Error> {
         match Uuid::parse_str(param) {
             Ok(uuid) => Ok(CustomerId::new(uuid)),
-            Err(_) => Err(CannotProcessEntity("customer_id is not a correct uuid".to_string()))
+            Err(_) => Err(CannotProcessEntity::from_str("customer_id", "not a correct uuid"))
         }
     }
 }
@@ -107,7 +107,7 @@ pub async fn get_customer(
     customer_id: Result<CustomerId, CannotProcessEntity>,
     service: &rocket::State<Arc<CustomerService>>,
 ) -> Result<Option<Json<CustomerApiOutput>>, Custom<Json<ErrorApiOutput>>> {
-    let customer_id = customer_id?;
+    let customer_id = customer_id.map_err(ErrorApiOutput::from)?;
     Ok(service.get_by_id(&customer_id).await
         .map(|r| Json(r.into())))
 }

@@ -37,6 +37,12 @@ impl ErrorApiOutput {
         ErrorApiOutput::Unprocessable(error_map)
     }
 
+    pub fn unprocessable(key: &'static str, message: Cow<'static, str>) -> Self {
+        let mut error_map = HashMap::new();
+        error_map.insert(key, vec![message]);
+        ErrorApiOutput::Unprocessable(error_map)
+    }
+
     pub fn error_str(message: &'static str) -> Self {
         ErrorApiOutput::Error(Cow::Borrowed(message))
     }
@@ -56,11 +62,34 @@ impl From<ErrorApiOutput> for Custom<Json<ErrorApiOutput>> {
 }
 
 #[derive(Serialize, JsonSchema, Error, Debug)]
-#[error("error: {0}")]
-pub struct CannotProcessEntity(pub String);
+#[error("error: {values}")]
+pub struct CannotProcessEntity { key: &'static str, values: Cow<'static, str> }
+impl CannotProcessEntity {
 
-impl From<CannotProcessEntity> for Custom<Json<ErrorApiOutput>> {
+    pub fn message_str(value: &'static str) -> Self {
+        Self::from_str("message", value)
+    }
+
+    pub fn message_string(value: String) -> Self {
+        Self::from_string("message", value)
+    }
+
+    pub fn from_str(key: &'static str, value: &'static str) -> Self {
+        CannotProcessEntity {
+            key: key,
+            values: Cow::Borrowed(value) }
+    }
+
+    pub fn from_string(key: &'static str, value: String) -> Self {
+        CannotProcessEntity {
+            key: key,
+            values: Cow::Owned(value)
+        }
+    }
+}
+
+impl From<CannotProcessEntity> for ErrorApiOutput {
     fn from(value: CannotProcessEntity) -> Self {
-        Custom(Status::UnprocessableEntity, Json(ErrorApiOutput::error_string(value.0)))
+        ErrorApiOutput::unprocessable(value.key, value.values)
     }
 }
